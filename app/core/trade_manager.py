@@ -115,7 +115,8 @@ class TradeManager:
         logger.info(f"Target Budget Calc: Cash ${buying_power:.0f} + Stock ${current_holdings_val:.0f} = Equity ${base_equity:.0f}")
         
         # Explicit Slot Limit
-        max_slots = 2 if base_equity < 1000 else 3
+        # Lowered threshold to $300 to allow execution for smaller accounts
+        max_slots = 2 if base_equity < 300 else 3
         current_us_slots = sum(1 for t in self.active_trades.values() if t.get('market_type') == 'US')
         
         # If already full, return 0 (Shouldn't select anything)
@@ -297,9 +298,9 @@ class TradeManager:
                 base_equity = max(self.total_asset_usd, buying_power)
                 
                 # --- Explicit Slot Limit Logic ---
-                # Capital < $1000 -> Max 2 Slots
-                # Capital >= $1,000 -> Max 3 Slots
-                max_slots = 2 if base_equity < 1000 else 3
+                # Capital < $300 -> Max 2 Slots
+                # Capital >= $300 -> Max 3 Slots
+                max_slots = 2 if base_equity < 300 else 3
                 
                 # Count current US active trades
                 current_us_slots = sum(1 for t in self.active_trades.values() if t.get('market_type') == 'US')
