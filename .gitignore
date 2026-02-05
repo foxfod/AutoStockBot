@@ -3,6 +3,7 @@
 *.pem
 *.key
 kis_token_v2.json
+*.tar
 
 # Python
 __pycache__/
