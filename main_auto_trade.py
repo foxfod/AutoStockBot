@@ -217,7 +217,8 @@ async def trading_loop():
                      state['us_liquidation_done'] = True
 
                 # 4. Report
-                if is_time_in_range(US_CLOSE, dtime(5, 30), t) and not state['us_report_sent']:
+                # Send report just before session close (05:50 ~ 06:00)
+                if is_time_in_range(dtime(5, 50), US_CLOSE, t) and not state['us_report_sent']:
                     report = trade_manager.get_daily_report("US")
                     bot.send_message(report)
                     state['us_report_sent'] = True
