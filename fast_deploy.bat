@@ -32,7 +32,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-ssh -i "C:\path\to\mykey.pem" ubuntu@<서버IP> "cd <프로젝트폴더> && git pull && source venv/bin/activate && pip install -r requirements.txt && python main_auto_trade.py"
+ssh -i "E:\_AWS\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && git pull && source venv/bin/activate && pip install -r requirements.txt && python main_auto_trade.py"
 
 echo.
 echo ✅ Local Push Successful!
