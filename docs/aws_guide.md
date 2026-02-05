@@ -70,6 +70,18 @@ nano .env
 ```
 *(로컬의 .env 내용을 복사해서 붙여넣고, `Ctrl+O` -> `Enter` -> `Ctrl+X` 로 저장)*
 
+### D. 보안 그룹 (Security Group) 설정 (포트 8000 개방)
+웹 대시보드(http://<IP>:8000)에 접속하려면 AWS 보안 그룹에서 8000번 포트를 열어야 합니다.
+
+1. AWS Console > **EC2** > **인스턴스** 선택.
+2. 하단 탭의 **[보안]** 클릭 -> **보안 그룹 링크(sg-xxxx)** 클릭.
+3. **[Inbound rules(인바운드 규칙) 편집]** 클릭.
+4. **[규칙 추가]** 클릭:
+    - **유형(Type)**: `Custom TCP`
+    - **포트 범위(Port range)**: `8000`
+    - **소스(Source)**: `Anywhere-IPv4` (0.0.0.0/0) 또는 `My IP` (내 IP만 허용)
+5. **[규칙 저장]** 클릭.
+
 ## 5단계: 무중단 실행 설정 (Systemd)
 터미널을 꺼도 프로그램이 계속 돌고, 재부팅 해도 자동으로 시작되게 하려면 `systemd`를 씁니다.
 
@@ -115,3 +127,29 @@ sudo systemctl status scalping_bot
 ---
 **이제 터미널을 꺼도 봇은 24시간 쉬지 않고 돌아갑니다.**
 텔레그램으로 오는 "System Started" 알림을 확인하세요.
+
+## 6단계: 코드 업데이트 (Git 사용 시)
+로컬에서 코드를 수정하여 Git에 Push한 후, 서버에서 업데이트하는 방법입니다.
+
+1. 서버 접속 (SSH)
+2. 프로젝트 폴더로 이동:
+   ```bash
+   cd 레포지토리명
+   ```
+3. 최신 코드 가져오기:
+   ```bash
+   git pull
+   ```
+4. (필요 시) 라이브러리 추가 설치:
+   ```bash
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+5. 봇 (또는 웹 서버) 재시작:
+   ```bash
+   # Systemd 사용 시
+   sudo systemctl restart scalping_bot
+   
+   # 또는 수동 실행 시 (Ctrl+C로 종료 후 다시 실행)
+   python main_auto_trade.py
+   ```

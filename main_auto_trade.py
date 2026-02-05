@@ -12,25 +12,32 @@ from app.core.trade_manager import trade_manager
 from app.core.telegram_bot import bot
 from app.core.kis_api import kis
 from app.core.kis_websocket import kis_ws
+from app.core.logger_handler import AsyncQueueHandler
+from app.web.main import app as web_app, server_context
+import uvicorn
 
-# Configure Logging
 # Configure Logging
 import sys
 
 # Force UTF-8 for console output to handle emojis on Windows
 sys.stdout.reconfigure(encoding='utf-8')
 
+# Create Log Queue for Web Dashboard
+log_queue = asyncio.Queue(maxsize=1000)
+
 logging.basicConfig(
     level=logging.DEBUG, 
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler("daily_trade.log", encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout),
+        AsyncQueueHandler(log_queue) # Add Web Handler
     ]
 )
 # Silence OpenAI/HTTPX logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING) # Reduce Web Access Logs
 
 logger = logging.getLogger("AutoTrade")
 
@@ -64,6 +71,9 @@ state = {
     "last_scan_time": datetime.min,
     "last_risk_check_time": datetime.min
 }
+server_context["log_queue"] = log_queue
+server_context["bot_state"] = state
+server_context["trade_manager"] = trade_manager
 
 def is_time_in_range(start, end, current):
     """Check if current time is between start and end (handles midnight wrap)"""
@@ -72,9 +82,10 @@ def is_time_in_range(start, end, current):
     else: # Crosses midnight
         return start <= current or current <= end
 
-async def main():
+async def trading_loop():
+    """Original Main Loop extracted to a function"""
     bot.send_message("🤖 Global Auto Trading System Started (KR + US)")
-    logger.info("System Started")
+    logger.info("System Started - Trading Loop Active")
     
     # Initialize WebSocket
     logger.info("Initializing WebSocket connection...")
@@ -92,6 +103,12 @@ async def main():
     
     while True:
         try:
+            # Check Pause State
+            if server_context.get("is_paused", False):
+                # logger.info("Trading Paused...") # Optional: log periodically or just silent
+                await asyncio.sleep(1)
+                continue
+
             now = datetime.now()
             t = now.time()
             
@@ -222,6 +239,17 @@ async def main():
             except: 
                 pass
             await asyncio.sleep(60)
+
+async def main():
+    # Setup Web Server
+    config = uvicorn.Config(web_app, host="0.0.0.0", port=8000, log_level="warning")
+    server = uvicorn.Server(config)
+
+    # Run both Trading Loop and Web Server concurrently
+    await asyncio.gather(
+        server.serve(),
+        trading_loop()
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())

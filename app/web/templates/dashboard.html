@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalping Bot Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            900: '#111827',
+                            800: '#1f2937',
+                            700: '#374151',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for Log Viewer */
+        .log-viewer::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-viewer::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        .log-viewer::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+
+        .log-viewer::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 font-sans antialiased h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 shadow-md flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">🤖</span>
+            <h1 class="text-xl font-bold text-white tracking-wide">Scalping Bot <span
+                    class="text-blue-400">Dashboard</span></h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div id="connection-status" class="flex items-center space-x-2 text-sm text-red-400">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                <span>Disconnected</span>
+            </div>
+            <span id="server-time" class="text-gray-400 text-sm font-mono">--:--:--</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-6 overflow-hidden flex flex-col gap-6">
+
+        <!-- Control Panel -->
+        <div class="flex justify-end space-x-2">
+            <button id="btn-pause" onclick="togglePause()"
+                class="px-3 py-1 bg-yellow-600 hover:bg-yellow-500 rounded text-sm font-bold transition">
+                ⏸ Pause
+            </button>
+            <button onclick="controlAction('restart')"
+                class="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm font-bold transition">
+                🔄 Restart
+            </button>
+            <button onclick="controlAction('shutdown')"
+                class="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-sm font-bold transition">
+                🛑 Shutdown
+            </button>
+        </div>
+
+        <!-- Status Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <!-- Mode Card -->
+            <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-sm">
+                <h3 class="text-gray-400 text-xs uppercase font-semibold mb-1">Current Mode</h3>
+                <div id="bot-mode" class="text-lg font-bold text-white">Initializing...</div>
+            </div>
+
+            <!-- Active Trades Card -->
+            <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-sm">
+                <h3 class="text-gray-400 text-xs uppercase font-semibold mb-1">Active Trades</h3>
+                <div id="active-trades-count" class="text-2xl font-bold text-green-400">0</div>
+            </div>
+
+            <!-- KR Budget Card -->
+            <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-sm">
+                <h3 class="text-gray-400 text-xs uppercase font-semibold mb-1">KR Budget</h3>
+                <div id="kr-budget" class="text-lg font-mono text-yellow-400">₩0</div>
+            </div>
+
+            <!-- US Budget Card -->
+            <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-sm">
+                <h3 class="text-gray-400 text-xs uppercase font-semibold mb-1">US Budget</h3>
+                <div id="us-budget" class="text-lg font-mono text-blue-400">$0.00</div>
+            </div>
+        </div>
+
+        <!-- Log Viewer & Active List Split -->
+        <div class="flex-1 flex gap-4 min-h-0">
+
+            <!-- Log Viewer -->
+            <div
+                class="flex-[2] bg-black rounded-lg border border-gray-700 shadow-inner flex flex-col font-mono text-sm relative">
+                <div class="bg-gray-800 px-4 py-2 text-xs text-gray-400 border-b border-gray-700 flex justify-between">
+                    <span>Live Console Output</span>
+                    <button onclick="clearLogs()" class="hover:text-white">Clear</button>
+                </div>
+                <div id="log-container" class="log-viewer flex-1 overflow-y-auto p-4 space-y-1">
+                    <!-- Logs will be injected here -->
+                    <div class="text-gray-500 italic">Waiting for logs...</div>
+                </div>
+                <!-- Auto-scroll anchor -->
+                <div id="log-end"></div>
+            </div>
+
+            <!-- Active Trades Details (Right Panel) -->
+            <div class="flex-1 bg-gray-800 rounded-lg border border-gray-700 shadow-sm flex flex-col">
+                <div class="px-4 py-3 border-b border-gray-700">
+                    <h2 class="font-semibold text-white">Active Positions</h2>
+                </div>
+                <div id="trades-list" class="p-4 overflow-y-auto space-y-3">
+                    <!-- Trade Items -->
+                    <p class="text-gray-500 text-sm text-center py-4">No active trades.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const logContainer = document.getElementById('log-container');
+        const connectionStatus = document.getElementById('connection-status');
+
+        let ws;
+        let retryInterval = 3000;
+
+        function connectWebSocket() {
+            // Determine WS protocol (ws or wss)
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                connectionStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span><span class="text-green-400">Live Connected</span>';
+                connectionStatus.className = "flex items-center space-x-2 text-sm";
+                addLog({ data: { timestamp: new Date(), level: 'INFO', message: 'Dashboard connected to WebSocket.' } });
+            };
+
+            ws.onmessage = (event) => {
+                const payload = JSON.parse(event.data);
+                if (payload.type === 'log') {
+                    addLog(payload);
+                }
+            };
+
+            ws.onclose = () => {
+                connectionStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span><span class="text-red-400">Disconnected</span>';
+                setTimeout(connectWebSocket, retryInterval);
+            };
+        }
+
+        function addLog(payload) {
+            const data = payload.data; // {timestamp, level, message, logger}
+            const div = document.createElement('div');
+
+            // Color coding based on level
+            let colorClass = 'text-gray-300';
+            if (data.level === 'ERROR') colorClass = 'text-red-400 font-bold';
+            if (data.level === 'WARNING') colorClass = 'text-yellow-400';
+            if (data.level === 'INFO') colorClass = 'text-blue-300';
+
+            div.className = `break-words ${colorClass}`;
+            div.innerHTML = `<span class="opacity-50 text-xs">[${data.timestamp}]</span> <span class="font-bold text-xs">[${data.level}]</span> ${data.message}`;
+
+            logContainer.appendChild(div);
+
+            // Auto scroll
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Limit log entries (e.g., last 500)
+            if (logContainer.childElementCount > 500) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        function clearLogs() {
+            logContainer.innerHTML = '';
+        }
+
+        async function controlAction(action) {
+            if (!confirm(`Are you sure you want to ${action}?`)) return;
+
+            try {
+                const res = await fetch(`/api/control/${action}`, { method: 'POST' });
+                const data = await res.json();
+                addLog({ data: { timestamp: new Date(), level: 'SYSTEM', message: data.message } });
+
+                if (action === 'shutdown') {
+                    alert('Server shutting down. Connection will be lost.');
+                }
+            } catch (e) {
+                console.error("Control error:", e);
+                alert(`Failed to ${action}`);
+            }
+        }
+
+        async function togglePause() {
+            const btn = document.getElementById('btn-pause');
+            const isPaused = btn.innerText.includes('Resume');
+            const action = isPaused ? 'resume' : 'pause';
+
+            try {
+                await fetch(`/api/control/${action}`, { method: 'POST' });
+                // Button text will be updated by fetchState loop
+            } catch (e) {
+                console.error("Pause toggle error:", e);
+            }
+        }
+
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                const data = await res.json();
+
+                if (data.status === 'loading') return;
+
+                document.getElementById('server-time').innerText = data.server_time || '--:--:--';
+                document.getElementById('kr-budget').innerText = `₩${Math.round(data.kr_budget).toLocaleString()}`;
+                document.getElementById('us-budget').innerText = `$${data.us_budget.toFixed(2)}`;
+
+                // Update Mode & Button State
+                const modeText = document.getElementById('bot-mode');
+                const pauseBtn = document.getElementById('btn-pause');
+
+                if (data.is_paused) {
+                    modeText.innerText = "PAUSED ⏸";
+                    modeText.className = "text-lg font-bold text-yellow-400 animate-pulse";
+
+                    if (pauseBtn) {
+                        pauseBtn.innerText = "▶ Resume";
+                        pauseBtn.className = "px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-sm font-bold transition";
+                    }
+                } else {
+                    modeText.innerText = "Running 🚀";
+                    modeText.className = "text-lg font-bold text-green-400";
+
+                    if (pauseBtn) {
+                        pauseBtn.innerText = "⏸ Pause";
+                        pauseBtn.className = "px-3 py-1 bg-yellow-600 hover:bg-yellow-500 rounded text-sm font-bold transition";
+                    }
+                }
+
+                // Active Trades
+                const trades = data.active_trades || {};
+                const keys = Object.keys(trades);
+                document.getElementById('active-trades-count').innerText = keys.length;
+
+                renderTrades(trades);
+
+            } catch (e) {
+                console.error("State fetch error:", e);
+            }
+        }
+
+        function renderTrades(trades) {
+            const container = document.getElementById('trades-list');
+            if (Object.keys(trades).length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">No active trades.</p>';
+                return;
+            }
+
+            container.innerHTML = Object.entries(trades).map(([code, trade]) => {
+                const isUS = trade.market_type === 'US';
+
+                // Use profit_rate (calculated in backend)
+                const profitRate = trade.profit_rate || 0;
+
+                // KR Standard: Red is Up, Blue is Down
+                // US Standard: Green is Up, Red is Down
+                // Let's stick to KR Standard (Red Up) as per user preference likely
+                const pnlClass = (profitRate > 0) ? 'text-red-500' : 'text-blue-500';
+
+                return `
+                    <div class="bg-gray-700/50 p-3 rounded border border-gray-600">
+                        <div class="flex justify-between items-start mb-1">
+                            <div>
+                                <span class="font-bold text-white text-lg">${trade.name || code}</span>
+                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-600 text-gray-300 ml-2">${code}</span>
+                            </div>
+                            <span class="text-xs font-bold ${isUS ? 'text-blue-300' : 'text-yellow-300'} border border-gray-600 px-1 rounded">
+                                ${isUS ? 'US' : 'KR'}
+                            </span>
+                        </div>
+                        <div class="flex justify-between text-sm mt-2">
+                             <div class="flex flex-col">
+                                <span class="text-gray-400 text-xs">Buy Price</span>
+                                <span>${trade.buy_price?.toLocaleString()}</span>
+                             </div>
+                             <div class="flex flex-col text-right">
+                                <span class="text-gray-400 text-xs">Current</span>
+                                <span class="font-bold text-white">${trade.current_price?.toLocaleString() || '-'}</span>
+                             </div>
+                             <div class="flex flex-col text-right">
+                                <span class="text-gray-400 text-xs">P&L</span>
+                                <span class="font-bold ${pnlClass}">${profitRate.toFixed(2)}%</span>
+                             </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Init
+        connectWebSocket();
+        setInterval(fetchState, 2000); // Poll state every 2s
+
+    </script>
+</body>
+
+</html>
