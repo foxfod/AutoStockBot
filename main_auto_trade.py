@@ -1,0 +1,227 @@
+import asyncio
+import time
+import logging
+from datetime import datetime, timedelta, time as dtime
+from dotenv import load_dotenv
+
+# Load Env
+load_dotenv()
+
+from app.core.selector import selector
+from app.core.trade_manager import trade_manager
+from app.core.telegram_bot import bot
+from app.core.kis_api import kis
+from app.core.kis_websocket import kis_ws
+
+# Configure Logging
+# Configure Logging
+import sys
+
+# Force UTF-8 for console output to handle emojis on Windows
+sys.stdout.reconfigure(encoding='utf-8')
+
+logging.basicConfig(
+    level=logging.DEBUG, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("daily_trade.log", encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+# Silence OpenAI/HTTPX logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+logger = logging.getLogger("AutoTrade")
+
+# === Constants ===
+# KR Market
+KR_START = dtime(8, 30)
+KR_SCAN_START = dtime(8, 40)
+KR_TRADE_START = dtime(9, 0)
+KR_LIQUIDATION = dtime(15, 15)
+KR_CLOSE = dtime(15, 30)
+
+# US Market (Approximate for 24h cycle)
+# Adjust for Summer Time manually or add logic later. 
+# Winter: Open 23:30. Close 06:00.
+# Summer: Open 22:30. Close 05:00.
+# We set wide window 22:00 ~ 06:00.
+US_START = dtime(22, 0) 
+US_SCAN_START = dtime(22, 10)
+US_TRADE_START = dtime(22, 30) # Pre-market / Early
+US_LIQUIDATION = dtime(5, 40)  # 05:40 AM KST (Before US Close 06:00)
+US_CLOSE = dtime(6, 0)
+
+SCAN_INTERVAL = 10 # 10 Minutes
+MAX_TRADES = 3
+
+state = {
+    "kr_liquidation_done": False,
+    "kr_report_sent": False,
+    "us_liquidation_done": False,
+    "us_report_sent": False,
+    "last_scan_time": datetime.min,
+    "last_risk_check_time": datetime.min
+}
+
+def is_time_in_range(start, end, current):
+    """Check if current time is between start and end (handles midnight wrap)"""
+    if start <= end:
+        return start <= current <= end
+    else: # Crosses midnight
+        return start <= current or current <= end
+
+async def main():
+    bot.send_message("🤖 Global Auto Trading System Started (KR + US)")
+    logger.info("System Started")
+    
+    # Initialize WebSocket
+    logger.info("Initializing WebSocket connection...")
+    kis.websocket = kis_ws  # Link WebSocket to KIS API
+    
+    if kis_ws.connect():
+        bot.send_message("✅ WebSocket Connected - Real-time streaming enabled")
+    else:
+        bot.send_message("⚠️ WebSocket connection failed - Using REST API fallback")
+    
+    # Sync Holdings & Send Startup Report
+    trade_manager.sync_portfolio()
+    startup_msg = trade_manager.get_account_status_str()
+    bot.send_message(f"🚀 System Startup Ready\n{startup_msg}")
+    
+    while True:
+        try:
+            now = datetime.now()
+            t = now.time()
+            
+            # === KR Mode (08:30 ~ 15:40) ===
+            if is_time_in_range(KR_START, dtime(15, 40), t):
+                # Reset US flags if entering KR day (e.g. at 08:30)
+                if state['us_report_sent']:
+                    state['us_liquidation_done'] = False
+                    state['us_report_sent'] = False
+                
+                # 1. Scanning
+                time_since = (now - state['last_scan_time']).total_seconds() / 60
+                
+                is_scan_time = (
+                    is_time_in_range(KR_SCAN_START, dtime(14, 30), t) and
+                    time_since >= SCAN_INTERVAL
+                )
+                
+                if is_scan_time:
+                    open_slots = MAX_TRADES - len([k for k,v in trade_manager.active_trades.items() if v.get('market_type')!='US'])
+                    if open_slots > 0:
+                        # Check Budget
+                        budget = trade_manager.get_available_budget("KR")
+                        if budget < 5000:
+                            logger.info(f"Skip Scanning: Insufficient KRW ({budget:,.0f})")
+                        else:
+                            bot.send_message(f"🇰🇷 한국장 스캔 중... ({open_slots} 슬롯, 예산: {budget:,.0f} KRW)")
+                            # KR Selection
+                            # Ask for more candidates than slots to handle skips (e.g. Add-on skipped)
+                            target_count = open_slots + 2 
+                            candidates = await selector.select_stocks(budget, target_count=target_count)
+                            state['last_scan_time'] = now
+                            if candidates:
+                                trade_manager.process_signals(candidates) # Filters internally
+
+                # 2. Monitoring
+                if is_time_in_range(KR_TRADE_START, KR_LIQUIDATION, t):
+                    trade_manager.monitor_active_trades("KR")
+                    if now.second % 30 == 0: trade_manager.clean_pending_orders()
+                    
+                    # AI Risk Check (Every 10 mins) - KR Stocks
+                    risk_time_since = (now - state['last_risk_check_time']).total_seconds() / 60
+                    if risk_time_since >= 10:
+                         trade_manager.monitor_risks("KR")
+                         state['last_risk_check_time'] = now
+
+                # 3. Liquidation (One-time)
+                if t >= KR_LIQUIDATION and not state['kr_liquidation_done']:
+                    bot.send_message("⏰ 한국장 마감 임박. 보유 종목 전량 청산 중...")
+                    trade_manager.liquidate_all_positions("KR")
+                    state['kr_liquidation_done'] = True
+                
+                # 4. Report (One-time)
+                if t >= KR_CLOSE and not state['kr_report_sent']:
+                    report = trade_manager.get_daily_report("KR")
+                    bot.send_message(report)
+                    state['kr_report_sent'] = True
+                    logger.info("KR Session Ended.")
+
+            # === US Mode (22:00 ~ 06:00) ===
+            elif is_time_in_range(US_START, dtime(6, 0), t):
+                # Reset KR flags
+                if state['kr_report_sent']:
+                    state['kr_liquidation_done'] = False
+                    state['kr_report_sent'] = False
+
+                # 1. Scanning
+                time_since = (now - state['last_scan_time']).total_seconds() / 60
+                is_scan_time = (
+                    is_time_in_range(US_SCAN_START, dtime(4, 0), t) and
+                    time_since >= SCAN_INTERVAL
+                )
+                
+                if is_scan_time:
+                    open_slots = MAX_TRADES - len([k for k,v in trade_manager.active_trades.items() if v.get('market_type')=='US'])
+                    if open_slots > 0:
+                        # Check Budget (Target Slot Budget)
+                        budget = trade_manager.get_target_slot_budget_us()
+                        if budget < 20:
+                             logger.info(f"Skip Scanning: Insufficient USD for Next Slot ({budget:.2f})")
+                        else:
+                            bot.send_message(f"🇺🇸 미국장 스캔 중... ({open_slots} 슬롯, 목표 예산: ${budget:.2f})")
+                            # US Selection
+                            candidates = await selector.select_us_stocks(budget)
+                            state['last_scan_time'] = now
+                            if candidates:
+                                trade_manager.process_signals(candidates)
+
+                # 2. Monitoring
+                if is_time_in_range(US_TRADE_START, US_LIQUIDATION, t):
+                    trade_manager.monitor_active_trades("US")
+                    
+                    # AI Risk Check (Every 10 mins)
+                    risk_time_since = (now - state['last_risk_check_time']).total_seconds() / 60
+                    if risk_time_since >= 10:
+                         trade_manager.monitor_risks("US")
+                         state['last_risk_check_time'] = now
+                
+                # 3. Liquidation
+                # Note: dtime comparison wrapping midnight is tricky.
+                # US_LIQUIDATION is 04:45. Valid logic needed.
+                # If t >= US_LIQUIDATION (04:45) AND t < US_CLOSE (05:00)
+                if is_time_in_range(US_LIQUIDATION, US_CLOSE, t) and not state['us_liquidation_done']:
+                     bot.send_message("⏰ 미국장 마감 임박. 보유 종목 전량 청산 중...")
+                     trade_manager.liquidate_all_positions("US")
+                     state['us_liquidation_done'] = True
+
+                # 4. Report
+                if is_time_in_range(US_CLOSE, dtime(5, 30), t) and not state['us_report_sent']:
+                    report = trade_manager.get_daily_report("US")
+                    bot.send_message(report)
+                    state['us_report_sent'] = True
+                    logger.info("US Session Ended.")
+            
+            else:
+                # Sleep Period
+                pass
+            
+            await asyncio.sleep(1)
+
+        except KeyboardInterrupt:
+            logger.info("Stopped by user.")
+            break
+        except Exception as e:
+            logger.error(f"Error in Main Loop: {e}", exc_info=True)
+            try:
+                bot.send_message(f"🚨 System Error: {e}")
+            except: 
+                pass
+            await asyncio.sleep(60)
+
+if __name__ == "__main__":
+    asyncio.run(main())

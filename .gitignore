@@ -1,0 +1,23 @@
+# Security
+.env
+*.pem
+*.key
+kis_token_v2.json
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.pytest_cache/
+
+# Logs
+*.log
+logs/
+
+# System
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

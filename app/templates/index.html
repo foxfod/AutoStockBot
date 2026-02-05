@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="km">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalping Stock Selector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                Scalping Stock Selector
+            </h1>
+            <button onclick="runSelection()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded shadow transition">
+                Rule Now
+            </button>
+        </header>
+
+        <div class="bg-gray-800 rounded-lg p-6 shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-4">Today's Selection</h2>
+
+            {% if stocks %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-gray-400 border-b border-gray-700">
+                            <th class="p-3">Symbol</th>
+                            <th class="p-3">Name</th>
+                            <th class="p-3">Price</th>
+                            <th class="p-3">Target</th>
+                            <th class="p-3">Stop Loss</th>
+                            <th class="p-3">Score</th>
+                            <th class="p-3">Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stock in stocks %}
+                        <tr class="border-b border-gray-700 hover:bg-gray-750">
+                            <td class="p-3">{{ stock.symbol }}</td>
+                            <td class="p-3 font-medium text-blue-300">{{ stock.name }}</td>
+                            <td class="p-3">{{ stock.price }}</td>
+                            <td class="p-3 text-green-400">{{ stock.target }}</td>
+                            <td class="p-3 text-red-400">{{ stock.stop_loss }}</td>
+                            <td class="p-3">
+                                <span class="px-2 py-1 rounded text-xs font-bold
+                                    {% if stock.score >= 80 %} bg-green-900 text-green-300
+                                    {% elif stock.score >= 50 %} bg-yellow-900 text-yellow-300
+                                    {% else %} bg-red-900 text-red-300 {% endif %}">
+                                    {{ stock.score }}
+                                </span>
+                            </td>
+                            <td class="p-3 text-sm text-gray-300">{{ stock.reason }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-8">No stocks selected yet. Click "Run Now" to start.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        async function runSelection() {
+            const btn = document.querySelector('button');
+            const statusDiv = document.getElementById('status-msg');
+
+            try {
+                const res = await fetch('/run-selection', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.message.includes("already")) {
+                    alert("Already running!");
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+                btn.innerText = "Running...";
+
+                // Start polling
+                pollStatus();
+
+            } catch (error) {
+                alert('Error starting selection');
+                resetBtn();
+            }
+        }
+
+        async function pollStatus() {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch('/status');
+                    const data = await res.json();
+
+                    if (!data.running) {
+                        clearInterval(interval);
+                        location.reload();
+                    }
+                } catch (e) {
+                    console.error("Polling error", e);
+                }
+            }, 2000);
+        }
+
+        function resetBtn() {
+            const btn = document.querySelector('button');
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.innerText = "Rule Now";
+        }
+    </script>
+</body>
+
+</html>
