@@ -138,12 +138,34 @@
         </div>
     </main>
 
+    <!-- Connection Lost Overlay -->
+    <div id="connection-lost" class="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-50 hidden">
+        <div class="text-red-500 text-6xl mb-4">⚠️</div>
+        <h2 class="text-2xl font-bold text-white mb-2">서버 연결 끊김</h2>
+        <p class="text-gray-300 mb-6">서버와 통신할 수 없습니다. 서버가 켜져 있는지 확인하세요.</p>
+        <button onclick="location.reload()"
+            class="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white font-bold transition">
+            재연결 시도
+        </button>
+    </div>
+
     <script>
         const logContainer = document.getElementById('log-container');
         const connectionStatus = document.getElementById('connection-status');
+        const offlineOverlay = document.getElementById('connection-lost');
 
         let ws;
         let retryInterval = 3000;
+        let errorCount = 0;
+
+        function showOffline() {
+            offlineOverlay.classList.remove('hidden');
+        }
+
+        function hideOffline() {
+            offlineOverlay.classList.add('hidden');
+            errorCount = 0;
+        }
 
         function connectWebSocket() {
             // Determine WS protocol (ws or wss)
@@ -156,6 +178,7 @@
                 connectionStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span><span class="text-green-400">Live Connected</span>';
                 connectionStatus.className = "flex items-center space-x-2 text-sm";
                 addLog({ data: { timestamp: new Date(), level: 'INFO', message: 'Dashboard connected to WebSocket.' } });
+                hideOffline();
             };
 
             ws.onmessage = (event) => {
@@ -232,7 +255,10 @@
         async function fetchState() {
             try {
                 const res = await fetch('/api/state');
+                if (!res.ok) throw new Error("Server Error");
+
                 const data = await res.json();
+                hideOffline(); // Reset error state on success
 
                 if (data.status === 'loading') return;
 
@@ -271,6 +297,10 @@
 
             } catch (e) {
                 console.error("State fetch error:", e);
+                errorCount++;
+                if (errorCount > 3) {
+                    showOffline();
+                }
             }
         }
 
