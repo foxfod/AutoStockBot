@@ -1,0 +1,17 @@
+{
+    "market_sentiment": "NEUTRAL",
+    "risk_level": "SAFE",
+    "kr_parameters": {
+        "target_profit_rate": 3.0,
+        "stop_loss_rate": 2.0,
+        "max_slots": 3,
+        "focus_sectors": []
+    },
+    "us_parameters": {
+        "target_profit_rate": 3.0,
+        "stop_loss_rate": 2.0,
+        "max_slots": 3,
+        "focus_sectors": []
+    },
+    "last_updated": ""
+}

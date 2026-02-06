@@ -176,10 +176,23 @@ async def trading_loop():
                 
                 # 4. Report (One-time)
                 if t >= KR_CLOSE and not state['kr_report_sent']:
+                    # Send Daily Report
                     report = trade_manager.get_daily_report("KR")
                     bot.send_message(report)
+                    
+                    # Run Auto-Optimization
+                    from app.core.optimizer import optimizer
+                    bot.send_message("🧠 AI 최적화 모듈 실행 중 (오늘 성과 기반)...")
+                    res = optimizer.run_optimization("KR")
+                    
+                    if res:
+                        reason = res.get('reason', 'N/A')
+                        new_target = res.get('target_profit_rate')
+                        new_stop = res.get('stop_loss_rate')
+                        bot.send_message(f"🔧 내일 전략 최적화 완료:\n목표가: {new_target}%\n손절가: {new_stop}%\n이유: {reason}")
+                    
                     state['kr_report_sent'] = True
-                    logger.info("KR Session Ended.")
+                    logger.info("KR Session Ended & Strategy Optimized.")
 
             # === US Mode (22:00 ~ 06:00) ===
             elif is_time_in_range(US_START, dtime(6, 0), t):
@@ -244,8 +257,20 @@ async def trading_loop():
                 if is_time_in_range(dtime(5, 50), US_CLOSE, t) and not state['us_report_sent']:
                     report = trade_manager.get_daily_report("US")
                     bot.send_message(report)
+                    
+                    # Run Auto-Optimization
+                    from app.core.optimizer import optimizer
+                    bot.send_message("🧠 AI 최적화 모듈 실행 중 (미국장 성과 기반)...")
+                    res = optimizer.run_optimization("US")
+                    
+                    if res:
+                        reason = res.get('reason', 'N/A')
+                        new_target = res.get('target_profit_rate')
+                        new_stop = res.get('stop_loss_rate')
+                        bot.send_message(f"🔧 내일 미장 전략 최적화 완료:\n목표가: {new_target}%\n손절가: {new_stop}%\n이유: {reason}")
+                    
                     state['us_report_sent'] = True
-                    logger.info("US Session Ended.")
+                    logger.info("US Session Ended & Strategy Optimized.")
             
             else:
                 # Sleep Period

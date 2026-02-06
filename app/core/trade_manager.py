@@ -397,18 +397,29 @@ class TradeManager:
                 reason = stock.get('reason', 'No details')
                 
                 # Sane Defaults if AI returns None (Calculate BEFORE sending message)
+                # Load Dynamic Strategy Config
+                from app.core.optimizer import optimizer
+                config = optimizer.load_config()
+                
+                market_key = "us_parameters" if market_type == "US" else "kr_parameters"
+                default_target = float(config.get(market_key, {}).get('target_profit_rate', 3.0))
+                default_stop = float(config.get(market_key, {}).get('stop_loss_rate', 2.0))
+                
                 t_val = stock.get('target')
-                if t_val is None: t_val = 3.0
+                if t_val is None: t_val = default_target
                 target_pct = float(t_val)
                 
-                # Stop Loss Logic (Enforce Min 2%)
+                # Stop Loss Logic
                 sl_val = stock.get('stop_loss')
-                if sl_val is None: sl_val = 2.0
+                if sl_val is None: sl_val = default_stop
                 
                 raw_stop = float(sl_val)
                 stop_pct = abs(raw_stop)
-                if stop_pct < 2.0:
-                    stop_pct = 2.0 # Enforce minimum 2% stop loss
+                
+                # AI might suggest very loose stop (e.g. 10%), allow it ONLY if it's within Config "Safety" limits?
+                # For now, let's trust AI but enforce Hard Floor 1.5%
+                if stop_pct < 1.5:
+                    stop_pct = 1.5 # Enforce Hard Limit 1.5%
 
                 bot.send_message(
                     f"🚀 {market_type} 매수 체결: {name}\n"

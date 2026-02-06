@@ -846,4 +846,39 @@ class KisApi:
         logger.error(f"Failed to get today trades: {data}")
         return []
 
+    # === Market Index Support (Top-Down Analysis) ===
+
+    def get_current_index(self, market_code="0001"):
+        """
+        Get Domestic Index (KOSPI/KOSDAQ). 
+        market_code: "0001" (Kospi), "1001" (Kosdaq)
+        """
+        self.get_access_token()
+        url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
+        headers = self._get_headers(tr_id="FHKUP03500100") 
+        
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "U", # U: Upjong (Index)
+            "FID_INPUT_ISCD": market_code
+        }
+        
+        try:
+            res = requests.get(url, headers=headers, params=params, timeout=10)
+            data = res.json()
+            if res.status_code == 200 and 'output' in data:
+                return data['output'] # bstp_nmiv (Current), prdy_vrss (Change)
+        except Exception as e:
+            logger.error(f"Failed to get KR Index {market_code}: {e}")
+        return None
+
+    def get_overseas_index(self, symbol="COMP", excg="NAS"):
+        """
+        Get Overseas Index.
+        symbol: COMP (Nasdaq Composite), SPX (S&P500), DJI (Dow Jones)
+        excg: NAS/NYS
+        """
+        self.get_access_token()
+        # Use price endpoint but usually specific ticker for index
+        return self.get_overseas_price(symbol, excg)
+
 kis = KisApi()

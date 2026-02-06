@@ -18,8 +18,15 @@ class Selector:
         """
         import asyncio
         from app.core.telegram_bot import bot # Import bot for reporting
+        from app.core.market_analyst import market_analyst
         
         start_time = time.time()
+        
+        # 0. Market Context (Top-Down)
+        market_ctx = market_analyst.get_market_context_for_ai("KR")
+        logger.info(f"Market Context: {market_ctx}")
+        bot.send_message(f"🌍 시장 분석 결과: {market_ctx}")
+
         logger.info(f"Starting stock selection (Budget: {budget:,.0f} KRW, Target: {target_count})...")
         bot.send_message(f"🔍 종목 선정 시작 (예산: {budget:,.0f}원, 목표: {target_count}개)")
         
@@ -141,6 +148,10 @@ class Selector:
             logger.info(f"Batch {current_batch_num}: {len(analysis_jobs)} candidates passed technical check. Running AI...")
             
             # 4. Run AI Analysis (Batch)
+            # Inject Market Context into Batch Request
+            for job in analysis_jobs:
+                job['market_status'] = market_ctx 
+                
             batch_results = ai_analyzer.analyze_stocks_batch(analysis_jobs)
             
             # 5. Process Results
@@ -212,7 +223,14 @@ class Selector:
         budget: Available USD.
         """
         import asyncio
+        from app.core.market_analyst import market_analyst
+
         start_time = time.time()
+        
+        # Market Context
+        market_ctx = market_analyst.get_market_context_for_ai("US")
+        logger.info(f"US Market Context: {market_ctx}")
+        
         logger.info(f"Starting US stock selection (Budget: {budget if budget else 'N/A'} USD)...")
         
         # Expanded Candidates (50+ Stocks - No ETFs)
@@ -374,6 +392,10 @@ class Selector:
         logger.info(f"US Data collected for {len(analysis_jobs)} stocks. Analyzing (Batch)...")
         
         # Batch Analysis
+        # Inject Market Context
+        for job in analysis_jobs:
+            job['market_status'] = market_ctx
+            
         batch_results = ai_analyzer.analyze_stocks_batch(analysis_jobs)
         
         selected = []
