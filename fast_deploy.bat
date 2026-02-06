@@ -32,6 +32,13 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+
+echo [Auto-Fix] Resetting PEM file permissions...
+icacls "E:\_AWS\AutoStockBot.pem" /reset >nul
+icacls "E:\_AWS\AutoStockBot.pem" /grant:r "%USERNAME%:R" >nul
+icacls "E:\_AWS\AutoStockBot.pem" /inheritance:r >nul
+
+echo [4/4] Connecting to Remote Server...
 ssh -i "E:\_AWS\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && git pull && source venv/bin/activate && pip install -r requirements.txt && python main_auto_trade.py"
 
 echo.
