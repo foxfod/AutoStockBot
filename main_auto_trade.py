@@ -155,11 +155,24 @@ async def trading_loop():
                          trade_manager.monitor_risks("KR")
                          state['last_risk_check_time'] = now
 
-                # 3. Liquidation (One-time)
-                if t >= KR_LIQUIDATION and not state['kr_liquidation_done']:
-                    bot.send_message("⏰ 한국장 마감 임박. 보유 종목 전량 청산 중...")
-                    trade_manager.liquidate_all_positions("KR")
-                    state['kr_liquidation_done'] = True
+                # 3. Liquidation (Retry Logic)
+                # Tried at 15:15. If failing, retry every 2 mins until 15:30.
+                if t >= KR_LIQUIDATION:
+                    if not state['kr_liquidation_done']:
+                        # Check Retry Interval (2 mins)
+                        last_try = state.get('last_kr_liquidation_try_time', datetime.min)
+                        time_since_try = (now - last_try).total_seconds()
+                        
+                        if time_since_try >= 120:
+                            bot.send_message("⏰ 한국장 마감 임박. 보유 종목 전량 청산 시도...")
+                            rem = trade_manager.liquidate_all_positions("KR")
+                            state['last_kr_liquidation_try_time'] = now
+                            
+                            if rem == 0:
+                                state['kr_liquidation_done'] = True
+                                bot.send_message("✅ 한국장 청산 완료.")
+                            else:
+                                bot.send_message(f"⚠️ 청산 미완료 ({rem} 종목 남음). 2분 뒤 재시도합니다.")
                 
                 # 4. Report (One-time)
                 if t >= KR_CLOSE and not state['kr_report_sent']:
@@ -207,14 +220,24 @@ async def trading_loop():
                          trade_manager.monitor_risks("US")
                          state['last_risk_check_time'] = now
                 
-                # 3. Liquidation
-                # Note: dtime comparison wrapping midnight is tricky.
-                # US_LIQUIDATION is 04:45. Valid logic needed.
-                # If t >= US_LIQUIDATION (04:45) AND t < US_CLOSE (05:00)
-                if is_time_in_range(US_LIQUIDATION, US_CLOSE, t) and not state['us_liquidation_done']:
-                     bot.send_message("⏰ 미국장 마감 임박. 보유 종목 전량 청산 중...")
-                     trade_manager.liquidate_all_positions("US")
-                     state['us_liquidation_done'] = True
+                # 3. Liquidation (Retry Logic)
+                # Tried at 05:40. If failing, retry every 2 mins until 06:00.
+                if is_time_in_range(US_LIQUIDATION, US_CLOSE, t):
+                    if not state['us_liquidation_done']:
+                        # Check Retry Interval (2 mins)
+                        last_try = state.get('last_liquidation_try_time', datetime.min)
+                        time_since_try = (now - last_try).total_seconds()
+                        
+                        if time_since_try >= 120:
+                            bot.send_message("⏰ 미국장 마감 임박. 보유 종목 전량 청산 시도...")
+                            rem = trade_manager.liquidate_all_positions("US")
+                            state['last_liquidation_try_time'] = now
+                            
+                            if rem == 0:
+                                state['us_liquidation_done'] = True
+                                bot.send_message("✅ 미국장 청산 완료.")
+                            else:
+                                bot.send_message(f"⚠️ 청산 미완료 ({rem} 종목 남음). 2분 뒤 재시도합니다.")
 
                 # 4. Report
                 # Send report just before session close (05:50 ~ 06:00)

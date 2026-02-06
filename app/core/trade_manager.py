@@ -778,6 +778,24 @@ class TradeManager:
                 logger.info(f"📡 WebSocket unsubscribed: {k}")
             del self.active_trades[k]
 
+        # Return remaining holdings count for verification
+        rem_count = 0
+        if market_filter in ["ALL", "US"]:
+             ovs_bal = kis.get_overseas_balance()
+             if ovs_bal and 'holdings' in ovs_bal:
+                 rem_count += len(ovs_bal['holdings'])
+        if market_filter in ["ALL", "KR"]:
+             kr_bal = kis.get_my_stock_balance()
+             if kr_bal:
+                 rem_count += len(kr_bal)
+                 
+        if rem_count == 0:
+            logger.info("✅ All positions successfully liquidated.")
+        else:
+            logger.warning(f"⚠️ Liquidation incomplete. {rem_count} positions remaining.")
+            
+        return rem_count
+
     def load_history(self):
         try:
             with open("trade_history.json", "r", encoding='utf-8') as f:
