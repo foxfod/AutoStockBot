@@ -29,21 +29,20 @@ git push
 if %errorlevel% neq 0 (
     echo [ERROR] Git Push failed. Check your network or credentials.
     pause
+    exit /b
+)
 
 echo [4/4] Connecting to Remote Server...
-ssh -i "C:\Users\foxfo\.ssh\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && git pull && source venv/bin/activate && pip install -r requirements.txt && python main_auto_trade.py"
+ssh -i "C:\Users\foxfo\.ssh\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart scalping_bot"
 
 echo.
-echo ✅ Local Push Successful!
+echo ✅ Local Push & Remote Restart Successful!
 echo.
 echo ========================================================
-echo  [Optional] Remote Server Update
+echo  [Info] Remote Server Update
 echo ========================================================
-echo If you have SSH set up, you can uncomment line 35 in this file
-echo to automatically trigger 'git pull' on the server.
-echo.
-echo Example command to add:
-echo ssh -i "key.pem" ubuntu@<YOUR_IP> "cd <REPO_DIR> && git pull && sudo systemctl restart scalping_bot"
+echo The bot service (scalping_bot) has been restarted.
+echo Check logs with: sudo journalctl -u scalping_bot -f
 echo.
 
 pause
