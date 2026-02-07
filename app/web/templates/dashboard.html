@@ -335,16 +335,27 @@
                         </div>
                         <div class="flex justify-between text-sm mt-2">
                              <div class="flex flex-col">
-                                <span class="text-gray-400 text-xs">Buy Price</span>
-                                <span>${trade.buy_price?.toLocaleString()}</span>
+                                <span class="text-gray-400 text-xs">Buy Price (Avg)</span>
+                                <div>
+                                    <span>${trade.buy_price?.toLocaleString()}</span>
+                                    <span class="text-xs text-gray-400 ml-1">x ${trade.quantity}</span>
+                                </div>
                              </div>
                              <div class="flex flex-col text-right">
-                                <span class="text-gray-400 text-xs">Current</span>
-                                <span class="font-bold text-white">${trade.current_price?.toLocaleString() || '-'}</span>
+                                <span class="text-gray-400 text-xs">Valuation</span>
+                                <div>
+                                    <span class="font-bold text-white">${trade.current_price?.toLocaleString()}</span>
+                                    <div class="text-xs text-gray-400">≈ ${Math.round(trade.value).toLocaleString()}</div>
+                                </div>
                              </div>
                              <div class="flex flex-col text-right">
                                 <span class="text-gray-400 text-xs">P&L</span>
-                                <span class="font-bold ${pnlClass}">${profitRate.toFixed(2)}%</span>
+                                <div>
+                                    <span class="font-bold ${pnlClass}">${profitRate.toFixed(2)}%</span>
+                                    <div class="text-xs ${pnlClass}">
+                                        ${trade.profit_amount > 0 ? '+' : ''}${Math.round(trade.profit_amount).toLocaleString()}
+                                    </div>
+                                </div>
                              </div>
                         </div>
                     </div>
