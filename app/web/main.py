@@ -1,11 +1,14 @@
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Form, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 import logging
 import asyncio
 import json
+import os
+import sys
 from pathlib import Path
+from datetime import datetime
 
 app = FastAPI(title="Scalping Bot Dashboard")
 
@@ -24,12 +27,12 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # Templates
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# Global Shared State (will be injected from main_auto_trade.py)
-# This includes the Log Queue and Bot State
+# Global Shared State
 server_context = {
-    "log_queue": None, # asyncio.Queue
-    "bot_state": None, # dict
-    "trade_manager": None # TradeManager Instance
+    "log_queue": None,
+    "bot_state": None,
+    "trade_manager": None,
+    "is_paused": False
 }
 
 class ConnectionManager:
@@ -49,12 +52,64 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# --- Authentication ---
+WEB_PASSWORD = os.getenv("WEB_PASSWORD", "admin") # Default password
+COOKIE_NAME = "access_token"
+
+async def get_current_user(request: Request):
+    token = request.cookies.get(COOKIE_NAME)
+    if not token or token != "authenticated":
+        return None
+    return "user"
+
+async def login_required(request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/login"})
+    return user
+
+# --- Routes ---
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login", response_class=HTMLResponse)
+async def login(request: Request, password: str = Form(...)):
+    if password == WEB_PASSWORD:
+        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        response.set_cookie(key=COOKIE_NAME, value="authenticated", httponly=True)
+        return response
+    else:
+        return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid Password"})
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
 @app.get("/", response_class=HTMLResponse)
-async def get_dashboard(request: Request):
+async def get_dashboard(request: Request, user=Depends(login_required)):
+    # If login_required fails, it raises HTTPException with 307 Redirect to /login
+    # But Depends(login_required) doesn't catch the exception inside dependencies typically for redirects in this manner 
+    # unless using an exception handler or specific logic.
+    # Actually, for simple redirects in dependency, raising HTTPException with 307 works well in browsers.
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
+# Exception Handler for Redirect
+from fastapi.responses import RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    if exc.status_code == 307:
+        return RedirectResponse(url=exc.headers["Location"])
+    return HTMLResponse(content=str(exc.detail), status_code=exc.status_code)
+
+
 @app.get("/api/state")
-async def get_state():
+async def get_state(user=Depends(login_required)):
     """Returns the current bot state and active trades"""
     if not server_context["bot_state"] or not server_context["trade_manager"]:
         return {"status": "loading"}
@@ -69,28 +124,19 @@ async def get_state():
     from app.core.kis_api import kis
     enriched_trades = {}
     
-    # Helper for safe float
     def safe_float(v):
         try: return float(v)
         except: return 0.0
 
     if tm.active_trades:
         for symbol, trade in tm.active_trades.items():
-            trade_data = trade.copy() # Shallow copy to avoid mutating original state logic if not needed
-            
+            trade_data = trade.copy()
             market_type = trade.get('market_type', 'KR')
-            
-            # Fetch Price
-            # This uses WebSocket cache if available, so it's fast
             price_info = kis.get_realtime_price(symbol, market_type)
-            
             current_price = 0
             if price_info:
                 current_price = safe_float(price_info.get('price', 0))
-            
-            # Fallback if price is 0 (maybe market closed or no data)
             if current_price == 0:
-                 # Use buy_price as fallback to avoid division by zero or scary -100%
                  current_price = trade.get('buy_price', 0)
 
             trade_data['current_price'] = current_price
@@ -113,29 +159,25 @@ async def get_state():
     }
 
 # === Control Endpoints ===
-import os
-import sys
 
 @app.post("/api/control/pause")
-async def pause_bot():
+async def pause_bot(user=Depends(login_required)):
     server_context["is_paused"] = True
     return {"status": "paused", "message": "Trading logic paused"}
 
 @app.post("/api/control/resume")
-async def resume_bot():
+async def resume_bot(user=Depends(login_required)):
     server_context["is_paused"] = False
     return {"status": "running", "message": "Trading logic resumed"}
 
 @app.post("/api/control/restart")
-async def restart_bot():
+async def restart_bot(user=Depends(login_required)):
     """Restarts the entire python process"""
-    # This might be abrupt, but effective.
-    # We should probably run this in a background task to allow response to return.
     asyncio.create_task(do_restart())
     return {"status": "restarting", "message": "Server is restarting..."}
 
 @app.post("/api/control/shutdown")
-async def shutdown_bot():
+async def shutdown_bot(user=Depends(login_required)):
     """Shuts down the python process"""
     asyncio.create_task(do_shutdown())
     return {"status": "shutting_down", "message": "Server is shutting down..."}
@@ -150,7 +192,17 @@ async def do_shutdown():
 
 @app.websocket("/ws/logs")
 async def websocket_endpoint(websocket: WebSocket):
+    # WebSocket Auth Check (Optional but recommended)
+    # Cookies are available in handshake
+    token = websocket.cookies.get(COOKIE_NAME)
+    if not token or token != "authenticated":
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await manager.connect(websocket)
+    import time
+    last_heartbeat = time.time()
+    
     try:
         while True:
             # Check queue for new logs
@@ -159,11 +211,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     log_data = await server_context["log_queue"].get()
                     await websocket.send_json({"type": "log", "data": log_data})
             
-            # Send periodic state update?
-            # Or client polls state? Let's just do logs here mostly for now.
-            # But we can also push state updates if we want real-time.
+            # Heartbeat (Ping)
+            now = time.time()
+            if now - last_heartbeat > 30:
+                try:
+                    await websocket.send_json({"type": "ping"})
+                    last_heartbeat = now
+                except Exception:
+                    break
             
-            # Simple heartbeat or wait
             await asyncio.sleep(0.1) 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalping Bot Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: { 900: '#111827', 800: '#1f2937', 700: '#374151' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 font-sans antialiased h-screen flex items-center justify-center">
+
+    <div class="bg-gray-800 p-8 rounded-lg shadow-lg max-w-sm w-full border border-gray-700">
+        <div class="text-center mb-6">
+            <span class="text-4xl">🤖</span>
+            <h1 class="text-2xl font-bold mt-2 text-white">System Login</h1>
+            <p class="text-gray-400 text-sm">Please identify yourself</p>
+        </div>
+
+        <form action="/login" method="post" class="space-y-4">
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-300">Password</label>
+                <input type="password" name="password" id="password" required autofocus
+                    class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-500"
+                    placeholder="Enter web password">
+            </div>
+
+            {% if error %}
+            <div class="text-red-400 text-sm text-center font-medium bg-red-900/30 p-2 rounded">
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <button type="submit"
+                class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                Sign In
+            </button>
+        </form>
+    </div>
+
+</body>
+
+</html>
