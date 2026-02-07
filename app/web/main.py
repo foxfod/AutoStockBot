@@ -141,11 +141,17 @@ async def get_state(user=Depends(login_required)):
 
             trade_data['current_price'] = current_price
             
+            qty = int(trade.get('qty', 0))
+            trade_data['quantity'] = qty
+            trade_data['value'] = current_price * qty
+
             buy_price = safe_float(trade.get('buy_price', 0))
             if buy_price > 0:
                 trade_data['profit_rate'] = ((current_price - buy_price) / buy_price) * 100
+                trade_data['profit_amount'] = (current_price - buy_price) * qty
             else:
                 trade_data['profit_rate'] = 0.0
+                trade_data['profit_amount'] = 0.0
                 
             enriched_trades[symbol] = trade_data
     
