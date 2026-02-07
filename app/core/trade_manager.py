@@ -773,11 +773,11 @@ class TradeManager:
                         symbol = stock['ovrs_pdno']
                         excg = stock['ovrs_excg_cd']
                         name = stock['ovrs_item_name']
-                        price = float(stock['ovrs_now_pric2'])
-                        
-                        # Sell with 5% slip for immediate execution
-                        kis.sell_overseas_order(symbol, qty, price=price*0.95, excg_cd=excg)
-                        bot.send_message(f"⏹️ 미장 청산 완료: {name}")
+                        # Sell with Market Price (Price=0) for immediate execution
+                        # User requested strict Market Order to ensure liquidation at session end.
+                        # API Doc: Input "0" for Market Price.
+                        kis.sell_overseas_order(symbol, qty, price=0, excg_cd=excg)
+                        bot.send_message(f"⏹️ 미장 청산 완료 (시장가): {name}")
 
         keys_to_remove = [k for k, v in self.active_trades.items() 
                           if (market_filter == "ALL") or (v.get('market_type') == market_filter)]

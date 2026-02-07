@@ -69,7 +69,9 @@ state = {
     "us_liquidation_done": False,
     "us_report_sent": False,
     "last_scan_time": datetime.min,
-    "last_risk_check_time": datetime.min
+    "last_risk_check_time": datetime.min,
+    "kr_market_closed": False, # Circuit Breaker for KR
+    "us_market_closed": False  # Circuit Breaker for US
 }
 server_context["log_queue"] = log_queue
 server_context["bot_state"] = state
@@ -81,6 +83,26 @@ def is_time_in_range(start, end, current):
         return start <= current <= end
     else: # Crosses midnight
         return start <= current or current <= end
+
+def check_market_open(market_type="KR"):
+    """
+    Check if the market is open based on:
+    1. Weekend (Sat/Sun) -> Closed
+    2. Circuit Breaker Flag -> Closed (If API noted holiday previously)
+    """
+    now = datetime.now()
+    
+    # 1. Check Weekend (0=Mon, 5=Sat, 6=Sun)
+    if now.weekday() >= 5:
+        return False, "Weekend (Sat/Sun)"
+        
+    # 2. Check Circuit Breaker
+    if market_type == "KR" and state.get("kr_market_closed"):
+        return False, "KR Market Closed Flag Active"
+    if market_type == "US" and state.get("us_market_closed"):
+        return False, "US Market Closed Flag Active"
+        
+    return True, "Open"
 
 async def trading_loop():
     """Original Main Loop extracted to a function"""
@@ -118,7 +140,16 @@ async def trading_loop():
                 if state['us_report_sent']:
                     state['us_liquidation_done'] = False
                     state['us_report_sent'] = False
+                    state['us_market_closed'] = False # Reset US Breaker
                 
+                # Check Market Open (Weekend/Holiday)
+                is_open, reason = check_market_open("KR")
+                if not is_open:
+                    if now.minute == 0 and now.second < 5: # Log once per hour
+                        logger.info(f"KR Market Check: Closed ({reason}). Sleeping...")
+                    await asyncio.sleep(1)
+                    continue
+
                 # 1. Scanning
                 time_since = (now - state['last_scan_time']).total_seconds() / 60
                 
@@ -200,6 +231,15 @@ async def trading_loop():
                 if state['kr_report_sent']:
                     state['kr_liquidation_done'] = False
                     state['kr_report_sent'] = False
+                    state['kr_market_closed'] = False # Reset KR Breaker
+
+                # Check Market Open (Weekend/Holiday)
+                is_open, reason = check_market_open("US")
+                if not is_open:
+                     if now.minute == 0 and now.second < 5:
+                         logger.info(f"US Market Check: Closed ({reason}). Sleeping...")
+                     await asyncio.sleep(1)
+                     continue
 
                 # 1. Scanning
                 time_since = (now - state['last_scan_time']).total_seconds() / 60
@@ -282,9 +322,22 @@ async def trading_loop():
             logger.info("Stopped by user.")
             break
         except Exception as e:
+            # Circuit Breaker Logic
+            err_msg = str(e)
+            if "장운영" in err_msg or "휴장" in err_msg or "Closed" in err_msg or "market is closed" in err_msg:
+                now = datetime.now()
+                t = now.time()
+                # Determine which market we are in
+                if is_time_in_range(KR_START, dtime(15, 40), t):
+                    state['kr_market_closed'] = True
+                    bot.send_message(f"⛔ 국장 휴일/장운영 종료 감지: {err_msg}. 오늘은 매매를 중단합니다.")
+                elif is_time_in_range(US_START, dtime(6, 0), t):
+                    state['us_market_closed'] = True
+                    bot.send_message(f"⛔ 미장 휴일/장운영 종료 감지: {err_msg}. 오늘은 매매를 중단합니다.")
+            
             logger.error(f"Error in Main Loop: {e}", exc_info=True)
             try:
-                bot.send_message(f"🚨 System Error: {e}")
+                bot.send_message(f"🚨 System Error (Auto-Recovering): {e}")
             except: 
                 pass
             await asyncio.sleep(60)
