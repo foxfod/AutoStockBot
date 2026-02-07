@@ -31,7 +31,7 @@ if %errorlevel% neq 0 (
     pause
 
 echo [4/4] Connecting to Remote Server...
-ssh -i "%USERPROFILE%\.ssh\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && git pull && source venv/bin/activate && pip install -r requirements.txt && python main_auto_trade.py"
+ssh -i "C:\Users\foxfo\.ssh\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && git pull && source venv/bin/activate && pip install -r requirements.txt && python main_auto_trade.py"
 
 echo.
 echo ✅ Local Push Successful!
