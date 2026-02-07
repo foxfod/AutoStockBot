@@ -318,9 +318,22 @@
                 const profitRate = trade.profit_rate || 0;
 
                 // KR Standard: Red is Up, Blue is Down
-                // US Standard: Green is Up, Red is Down
-                // Let's stick to KR Standard (Red Up) as per user preference likely
                 const pnlClass = (profitRate > 0) ? 'text-red-500' : 'text-blue-500';
+
+                // Helpers for formatting
+                const fmt = (n) => n?.toLocaleString() || '0';
+                const fmtKrw = (n) => Math.round(n || 0).toLocaleString();
+
+                // Build secondary lines for US Stocks
+                let buyPriceSub = '';
+                let valueSub = '';
+                let profitSub = '';
+
+                if (isUS) {
+                    buyPriceSub = `<div class="text-[10px] text-gray-500">(₩${fmtKrw(trade.buy_price_krw)})</div>`;
+                    valueSub = `<div class="text-[10px] text-gray-500">≈ ₩${fmtKrw(trade.value_krw)}</div>`;
+                    profitSub = `<div class="text-[10px] ${pnlClass}">(${trade.profit_amount > 0 ? '+' : ''}₩${fmtKrw(trade.profit_amount_krw)})</div>`;
+                }
 
                 return `
                     <div class="bg-gray-700/50 p-3 rounded border border-gray-600">
@@ -337,15 +350,17 @@
                              <div class="flex flex-col">
                                 <span class="text-gray-400 text-xs">Buy Price (Avg)</span>
                                 <div>
-                                    <span>${trade.buy_price?.toLocaleString()}</span>
+                                    <span>${isUS ? '$' : ''}${fmt(trade.buy_price)}</span>
                                     <span class="text-xs text-gray-400 ml-1">x ${trade.quantity}</span>
+                                    ${buyPriceSub}
                                 </div>
                              </div>
                              <div class="flex flex-col text-right">
                                 <span class="text-gray-400 text-xs">Valuation</span>
                                 <div>
-                                    <span class="font-bold text-white">${trade.current_price?.toLocaleString()}</span>
-                                    <div class="text-xs text-gray-400">≈ ${Math.round(trade.value).toLocaleString()}</div>
+                                    <span class="font-bold text-white">${isUS ? '$' : ''}${fmt(trade.current_price)}</span>
+                                    <div class="text-xs text-gray-400">≈ ${isUS ? '$' : ''}${fmt(Math.round(trade.value))}</div>
+                                    ${valueSub}
                                 </div>
                              </div>
                              <div class="flex flex-col text-right">
@@ -353,8 +368,9 @@
                                 <div>
                                     <span class="font-bold ${pnlClass}">${profitRate.toFixed(2)}%</span>
                                     <div class="text-xs ${pnlClass}">
-                                        ${trade.profit_amount > 0 ? '+' : ''}${Math.round(trade.profit_amount).toLocaleString()}
+                                        ${trade.profit_amount > 0 ? '+' : ''}${isUS ? '$' : ''}${fmt(Math.round(trade.profit_amount))}
                                     </div>
+                                    ${profitSub}
                                 </div>
                              </div>
                         </div>
