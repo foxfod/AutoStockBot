@@ -9,6 +9,9 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
+from pydantic import BaseModel
+from typing import Optional
+from app.core.market_data import market_data_manager
 
 app = FastAPI(title="Scalping Bot Dashboard")
 
@@ -108,6 +111,45 @@ async def http_exception_handler(request, exc):
     return HTMLResponse(content=str(exc.detail), status_code=exc.status_code)
 
 
+# Pydantic Models for Requests
+class SlotConfig(BaseModel):
+    market: str
+    count: int
+
+class TradeUpdate(BaseModel):
+    target_price: Optional[float] = None
+    stop_loss_price: Optional[float] = None
+
+@app.post("/api/config/slots")
+async def update_slots(config: SlotConfig, user=Depends(login_required)):
+    if not server_context["trade_manager"]:
+        raise HTTPException(status_code=503, detail="TradeManager not ready")
+    
+    server_context["trade_manager"].set_manual_slots(config.market, config.count)
+    return {"status": "success", "message": f"Updated {config.market} slots to {config.count}"}
+
+@app.post("/api/trade/{symbol}/sell")
+async def sell_trade(symbol: str, market_type: str = "KR", user=Depends(login_required)):
+    tm = server_context["trade_manager"]
+    if not tm:
+         raise HTTPException(status_code=503, detail="TradeManager not ready")
+    
+    result = tm.sell_position(symbol, market_type)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@app.post("/api/trade/{symbol}/update")
+async def update_trade(symbol: str, update: TradeUpdate, user=Depends(login_required)):
+    tm = server_context["trade_manager"]
+    if not tm:
+         raise HTTPException(status_code=503, detail="TradeManager not ready")
+    
+    success = tm.update_trade_settings(symbol, update.target_price, update.stop_loss_price)
+    if not success:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    return {"status": "success", "message": "Trade settings updated"}
+
 @app.get("/api/state")
 async def get_state(user=Depends(login_required)):
     """Returns the current bot state and active trades"""
@@ -119,6 +161,9 @@ async def get_state(user=Depends(login_required)):
     # Safely get budget
     kr_budget = tm.get_available_budget("KR")
     us_budget = tm.get_target_slot_budget_us() # Approximate
+    
+    # Market Data
+    market_info = await market_data_manager.get_market_data()
     
     # Enrich active trades with real-time data
     from app.core.kis_api import kis
@@ -146,12 +191,30 @@ async def get_state(user=Depends(login_required)):
             trade_data['value'] = current_price * qty
 
             buy_price = safe_float(trade.get('buy_price', 0))
+            
+            # --- KRW Conversion for US Stocks ---
+            if market_type == 'US':
+                rate = tm.exchange_rate
+                trade_data['current_price_krw'] = current_price * rate
+                trade_data['value_krw'] = (current_price * qty) * rate
+                trade_data['buy_price_krw'] = buy_price * rate
+            else:
+                trade_data['current_price_krw'] = current_price # Same for KR
+                trade_data['value_krw'] = current_price * qty
+                trade_data['buy_price_krw'] = buy_price
+
             if buy_price > 0:
                 trade_data['profit_rate'] = ((current_price - buy_price) / buy_price) * 100
                 trade_data['profit_amount'] = (current_price - buy_price) * qty
+                
+                if market_type == 'US':
+                    trade_data['profit_amount_krw'] = trade_data['profit_amount'] * tm.exchange_rate
+                else:
+                    trade_data['profit_amount_krw'] = trade_data['profit_amount']
             else:
                 trade_data['profit_rate'] = 0.0
                 trade_data['profit_amount'] = 0.0
+                trade_data['profit_amount_krw'] = 0.0
                 
             enriched_trades[symbol] = trade_data
     
@@ -161,6 +224,8 @@ async def get_state(user=Depends(login_required)):
         "kr_budget": kr_budget,
         "us_budget": us_budget,
         "active_trades": enriched_trades,
+        "market_info": market_info,
+        "manual_slots": tm.manual_slots,
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 

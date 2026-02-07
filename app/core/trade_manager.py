@@ -115,8 +115,14 @@ class TradeManager:
         logger.info(f"Target Budget Calc: Cash ${buying_power:.0f} + Stock ${current_holdings_val:.0f} = Equity ${base_equity:.0f}")
         
         # Explicit Slot Limit
-        # Lowered threshold to $300 to allow execution for smaller accounts
-        max_slots = 2 if base_equity < 300 else 3
+        # Check Manual Override first
+        if "US" in self.manual_slots:
+             max_slots = self.manual_slots["US"]
+             logger.info(f"Using Manual Slot Limit (US): {max_slots}")
+        else:
+             # Lowered threshold to $300 to allow execution for smaller accounts
+             max_slots = 2 if base_equity < 300 else 3
+             
         current_us_slots = sum(1 for t in self.active_trades.values() if t.get('market_type') == 'US')
         
         # If already full, return 0 (Shouldn't select anything)
@@ -131,8 +137,14 @@ class TradeManager:
             return buying_power
         else:
             # Standard Allocation
-            default_alloc = 0.5 if base_equity < 1000 else 0.33
-            target_amount = base_equity * default_alloc
+            # If manual slots are high, we should split accordingly
+            alloc_ratio = 1.0 / remaining_slots
+            target_amount = buying_power * alloc_ratio # Use buying power split, not equity alloc?
+            # Original logic was Equity * Alloc. 
+            # If 3 slots, 0.33. If 5 slots, 0.2.
+            # Let's stick to safe logic: Base Equity / Max Slots
+            target_amount = base_equity / max_slots
+            
             logger.info(f"Target Budget (Standard): ${target_amount:.2f}")
             return target_amount
 
@@ -331,7 +343,6 @@ class TradeManager:
                 qty = int(invest_amt // current_price)
             else:
                 # KR Market Allocation
-                # KR Market Allocation
                 # Calculate remaining slots for KR
                 if symbol in self.active_trades:
                     # If Add-on, we ignore slot limit (it's existing slot). 
@@ -340,11 +351,14 @@ class TradeManager:
                     logger.info(f"Add-on Allocation for {name}: Treating as 3 slots (Using 33% of Cash)")
                 else:
                     current_kr_slots = sum(1 for t in self.active_trades.values() if t.get('market_type', 'KR') == 'KR')
-                    MAX_KR_SLOTS = 3 
+                    
+                    if "KR" in self.manual_slots:
+                        MAX_KR_SLOTS = self.manual_slots["KR"]
+                    else:
+                        MAX_KR_SLOTS = 3 
+                        
                     remaining_slots = max(0, MAX_KR_SLOTS - current_kr_slots)
 
-                # Dynamic Allocation based on Remaining Slots (Split remaining cash equally)
-                # e.g., If 3 slots left and 3M KRW cash -> 1M per slot.
                 # Dynamic Allocation based on Remaining Slots (Split remaining cash equally)
                 # e.g., If 3 slots left and 3M KRW cash -> 1M per slot.
                 if remaining_slots > 0:
