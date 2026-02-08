@@ -252,4 +252,61 @@ class AIAnalyzer:
             logger.error(f"Batch Analysis Parsing Failed ({used_model}): {e}")
             return {}
 
+    def analyze_holding_stock(self, symbol: str, stock_name: str, tech_summary: dict, news_list: list) -> str:
+        """
+        Generate a detailed analysis report for a held stock.
+        Returns markdown text directly.
+        """
+        news_text = json.dumps(news_list, ensure_ascii=False) if news_list else "최근 주요 뉴스 없음."
+        
+        prompt = f"""
+        당신은 전문 주식 트레이더이자 리스크 관리자입니다.
+        현재 보유 중인 종목 '{stock_name} ({symbol})'에 대한 상세 분석 리포트를 작성해주세요.
+        
+        [기술적 지표]
+        - 현재가: {tech_summary.get('close')}
+        - 추세 (vs 20MA): {tech_summary.get('trend')}
+        - RSI (14): {tech_summary.get('rsi')}
+        - 변동성: {tech_summary.get('volatility')}%
+        - 거래량 변화: {tech_summary.get('volume_change')}% 이
+        
+        [최근 뉴스]
+        {news_text}
+        
+        [작성 요청 사항]
+        1. **종목 개요 및 뉴스 분석**: 최근 뉴스가 주가에 미치는 영향 (호재/악재) 요약.
+        2. **기술적 분석**: 현재 추세와 보조지표(RSI, 이평선)를 기반으로 한 상승/하락 가능성 진단.
+        3. **대응 전략**: 
+            - 현재가 기준 강력 홀딩, 분할 매도, 또는 전량 매도 추천.
+            - 단기 목표가 및 손절가 재조정 제안.
+        4. **결론**: 한 줄 요약.
+        
+        *반드시 한국어로 작성하고, 가독성 좋은 마크다운(Markdown) 형식으로 출력해주세요.*
+        """
+        
+        # 1. GPT
+        try:
+            logger.info(f"Generating Analysis Report for {stock_name} with GPT...")
+            res = self.openai_client.chat.completions.create(
+                model=self.gpt_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful financial analyst."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return res.choices[0].message.content
+        except Exception as e:
+            logger.error(f"GPT Report Gen Failed: {e}. Switching to Gemini...")
+            
+        # 2. Gemini
+        if self.gemini_model:
+            try:
+                res = self.gemini_model.generate_content(prompt)
+                return res.text
+            except Exception as e:
+                logger.error(f"Gemini Report Gen Failed: {e}")
+                return "AI 분석 서비스 일시적 오류. 잠시 후 다시 시도해주세요."
+        
+        return "AI 모델을 사용할 수 없습니다."
+
 ai_analyzer = AIAnalyzer()

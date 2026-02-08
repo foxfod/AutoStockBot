@@ -84,7 +84,7 @@
         <div class="flex items-center space-x-4">
             <div id="connection-status" class="flex items-center space-x-2 text-xs text-red-400 font-mono">
                 <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                <span>Disconnected</span>
+                <span>연결 끊김</span>
             </div>
             <span id="server-time" class="text-gray-400 text-xs font-mono">--:--:--</span>
         </div>
@@ -95,7 +95,7 @@
         <div id="market-marquee"
             class="whitespace-nowrap flex items-center gap-8 pl-4 animate-marquee hover:pause cursor-pointer text-sm font-mono">
             <!-- Market Items will be injected here -->
-            <span class="text-gray-500">Loading Market Data...</span>
+            <span class="text-gray-500">시장 데이터 불러오는 중...</span>
         </div>
     </div>
 
@@ -111,19 +111,19 @@
                 <!-- Bot Status -->
                 <div class="flex items-center bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-sm gap-4">
                     <div class="flex flex-col">
-                        <span class="text-[10px] text-gray-400 uppercase tracking-wider">Status</span>
-                        <div id="bot-mode" class="font-bold text-sm text-yellow-500 animate-pulse">Wait...</div>
+                        <span class="text-[10px] text-gray-400 uppercase tracking-wider">상태</span>
+                        <div id="bot-mode" class="font-bold text-sm text-yellow-500 animate-pulse">대기 중...</div>
                     </div>
                 </div>
 
                 <!-- Control Buttons -->
                 <div class="flex gap-2">
                     <button id="btn-pause" onclick="togglePause()"
-                        class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded text-sm font-bold shadow transition">Pause</button>
+                        class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded text-sm font-bold shadow transition">일시정지</button>
                     <button onclick="controlAction('restart')"
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-bold shadow transition">Restart</button>
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-bold shadow transition">재시작</button>
                     <button onclick="controlAction('shutdown')"
-                        class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-bold shadow transition">Off</button>
+                        class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-bold shadow transition">종료</button>
                 </div>
             </div>
 
@@ -135,7 +135,7 @@
                         <div class="flex items-center gap-2">
                             <span
                                 class="text-xs font-bold text-yellow-400 bg-gray-900 border border-gray-700 px-1 py-0.5 rounded">KR</span>
-                            <span class="text-xs text-gray-400">Slots</span>
+                            <span class="text-xs text-gray-400">슬롯</span>
                         </div>
                         <span id="kr-budget" class="text-xs font-mono text-gray-300">₩0</span>
                     </div>
@@ -156,7 +156,7 @@
                         <div class="flex items-center gap-2">
                             <span
                                 class="text-xs font-bold text-blue-400 bg-gray-900 border border-gray-700 px-1 py-0.5 rounded">US</span>
-                            <span class="text-xs text-gray-400">Slots</span>
+                            <span class="text-xs text-gray-400">슬롯</span>
                         </div>
                         <span id="us-budget" class="text-xs font-mono text-gray-300">$0.00</span>
                     </div>
@@ -175,13 +175,13 @@
             <!-- Active Positions Grid -->
             <div class="flex-1 flex flex-col min-h-0">
                 <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
-                    Active Positions
+                    보유 종목 현황
                     <span id="active-count"
                         class="bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">0</span>
                 </h2>
                 <div id="active-trades-grid" class="flex-1 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto pr-1">
                     <!-- Cards -->
-                    <div class="col-span-full text-center text-gray-600 py-10 text-sm">No Active Positions</div>
+                    <div class="col-span-full text-center text-gray-600 py-10 text-sm">보유 중인 종목이 없습니다</div>
                 </div>
             </div>
 
@@ -191,8 +191,8 @@
         <div class="flex-[2] flex flex-col bg-gray-950 min-w-0">
             <div
                 class="bg-gray-900 px-3 py-2 text-xs text-gray-400 border-b border-gray-800 flex justify-between items-center">
-                <span>Console Output</span>
-                <button onclick="clearLogs()" class="hover:text-white px-2">Clear</button>
+                <span>실시간 로그</span>
+                <button onclick="clearLogs()" class="hover:text-white px-2">지우기</button>
             </div>
             <div id="log-container" class="log-viewer flex-1 overflow-y-auto p-3 font-mono text-xs leading-5">
                 <!-- Logs -->
@@ -221,11 +221,11 @@
                 <!-- Main Stats -->
                 <div class="grid grid-cols-2 gap-4">
                     <div class="bg-gray-700/50 p-3 rounded">
-                        <span class="block text-xs text-gray-400">Profit Rate</span>
+                        <span class="block text-xs text-gray-400">수익률</span>
                         <span id="modal-pnl" class="block text-2xl font-bold text-green-400">+0.00%</span>
                     </div>
                     <div class="bg-gray-700/50 p-3 rounded">
-                        <span class="block text-xs text-gray-400">Valuation</span>
+                        <span class="block text-xs text-gray-400">평가금액</span>
                         <span id="modal-value" class="block text-xl font-bold text-white">$0.00</span>
                         <span id="modal-value-krw" class="block text-[10px] text-gray-500">≈ ₩0</span>
                     </div>
@@ -233,42 +233,54 @@
 
                 <!-- Detailed Info -->
                 <div class="text-sm space-y-2 border-t border-gray-700 pt-3">
-                    <div class="flex justify-between"><span>Current Price:</span> <span id="modal-price"
+                    <div class="flex justify-between"><span>현재가:</span> <span id="modal-price"
                             class="font-mono text-white">0</span></div>
-                    <div class="flex justify-between"><span>Avg Buy Price:</span> <span id="modal-buy-price"
+                    <div class="flex justify-between"><span>평단가:</span> <span id="modal-buy-price"
                             class="font-mono text-gray-300">0</span></div>
-                    <div class="flex justify-between"><span>Quantity:</span> <span id="modal-qty"
+                    <div class="flex justify-between"><span>보유수량:</span> <span id="modal-qty"
                             class="font-mono text-gray-300">0</span></div>
-                    <div class="flex justify-between text-yellow-400"><span>Est. Profit:</span> <span
-                            id="modal-profit-amt" class="font-mono">0</span></div>
+                    <div class="flex justify-between text-yellow-400"><span>평가손익:</span> <span id="modal-profit-amt"
+                            class="font-mono">0</span></div>
                 </div>
 
                 <!-- Settings Edit -->
                 <div class="bg-gray-900/50 p-3 rounded border border-gray-700 space-y-3">
                     <div class="flex items-center gap-2">
-                        <label class="text-xs text-gray-400 w-20">Target (%)</label>
+                        <label class="text-xs text-gray-400 w-20">목표가 (%)</label>
                         <input id="input-target" type="number" step="0.1"
                             class="flex-1 bg-gray-800 border-gray-600 rounded text-xs px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none"
-                            placeholder="e.g. 3.0">
+                            placeholder="e.g. 3.0" oninput="calcPricePreview('target')">
+                        <span id="preview-target" class="text-[10px] text-gray-500 w-20 text-right"></span>
                     </div>
                     <div class="flex items-center gap-2">
-                        <label class="text-xs text-gray-400 w-20">Stop Loss (%)</label>
+                        <label class="text-xs text-gray-400 w-20">손절가 (%)</label>
                         <input id="input-stop" type="number" step="0.1"
                             class="flex-1 bg-gray-800 border-gray-600 rounded text-xs px-2 py-1 focus:ring-1 focus:ring-red-500 outline-none"
-                            placeholder="e.g. 2.0">
+                            placeholder="e.g. 2.0" oninput="calcPricePreview('stop')">
+                        <span id="preview-stop" class="text-[10px] text-gray-500 w-20 text-right"></span>
                     </div>
                     <button onclick="updateTradeSettings()"
-                        class="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold transition">Update
-                        Settings</button>
-                    <p class="text-[10px] text-gray-500 text-center">Enter percentages (e.g. 3.0 for 3%)</p>
+                        class="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold transition">설정
+                        업데이트</button>
+                    <!-- <p class="text-[10px] text-gray-500 text-center">Enter percentages (e.g. 3.0 for 3%)</p> -->
                 </div>
+
+                <!-- Analysis Button -->
+                <button onclick="analyzeStock()"
+                    class="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded text-sm font-bold text-white shadow-lg flex justify-center items-center gap-2">
+                    ✨ AI 종목 분석 리포트 확인
+                </button>
+                <div id="analysis-result"
+                    class="hidden bg-gray-900 p-3 rounded text-xs text-gray-300 max-h-40 overflow-y-auto border border-gray-700 whitespace-pre-wrap">
+                </div>
+
             </div>
 
             <!-- Footer Actions -->
             <div class="bg-gray-900 px-4 py-3 flex gap-3">
                 <button onclick="sellTrade()"
                     class="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-bold text-white transition flex items-center justify-center gap-2">
-                    🚨 Sell All (Market)
+                    🚨 전량 매도 (시장가)
                 </button>
             </div>
         </div>
@@ -318,7 +330,7 @@
                 if (payload.type === 'log') addLog(payload);
             };
             ws.onclose = () => {
-                statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span><span>Disconnected</span>';
+                statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span><span>연결 끊김</span>';
                 setTimeout(connectWebSocket, 3000);
             };
         }
@@ -350,11 +362,11 @@
 
                 // 1. Top Bar
                 document.getElementById('server-time').innerText = data.server_time.split(' ')[1];
-                document.getElementById('bot-mode').innerText = data.is_paused ? "PAUSED" : "RUNNING 🚀";
+                document.getElementById('bot-mode').innerText = data.is_paused ? "일시정지" : "가동 중 🚀";
                 document.getElementById('bot-mode').className = data.is_paused ? "font-bold text-sm text-yellow-500 animate-pulse" : "font-bold text-sm text-green-400";
 
                 const btnPause = document.getElementById('btn-pause');
-                btnPause.innerText = data.is_paused ? "▶ Resume" : "⏸ Pause";
+                btnPause.innerText = data.is_paused ? "▶ 구동 재개" : "⏸ 일시정지";
                 btnPause.className = `px-4 py-2 rounded text-sm font-bold shadow transition ${data.is_paused ? 'bg-green-600 hover:bg-green-500' : 'bg-yellow-600 hover:bg-yellow-500'}`;
 
                 // 2. Market Info
@@ -419,7 +431,7 @@
                     html += `<div class="flex-1 rounded ${pnlColor} bg-opacity-80 border border-white/20 shadow-inner min-w-[10px]" title="${trade.name}"></div>`;
                 } else {
                     // Empty Slot
-                    html += `<div class="flex-1 rounded bg-gray-700/30 border border-dashed border-gray-600 flex items-center justify-center text-[10px] text-gray-500 min-w-[10px]">Empty</div>`;
+                    html += `<div class="flex-1 rounded bg-gray-700/30 border border-dashed border-gray-600 flex items-center justify-center text-[10px] text-gray-500 min-w-[10px]">빈 슬롯</div>`;
                 }
             }
             container.innerHTML = html;
@@ -430,7 +442,7 @@
             const list = Object.entries(trades);
 
             if (list.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center text-gray-600 py-10 text-sm">No Active Positions</div>`;
+                container.innerHTML = `<div class="col-span-full text-center text-gray-600 py-10 text-sm">보유 중인 종목이 없습니다</div>`;
                 return;
             }
 
@@ -469,7 +481,11 @@
 
         // --- Actions ---
         async function controlAction(action) {
-            if (!confirm(`Confirm ${action}?`)) return;
+            const actionName = {
+                'restart': '재시작',
+                'shutdown': '종료'
+            }[action] || action;
+            if (!confirm(`${actionName} 하시겠습니까?`)) return;
             await fetch(`/api/control/${action}`, { method: 'POST' });
         }
         async function togglePause() {
@@ -534,12 +550,30 @@
             document.getElementById('input-target').value = targetP;
             document.getElementById('input-stop').value = stopP;
 
+            // Update Previews
+            calcPricePreview('target');
+            calcPricePreview('stop');
+
+            // Reset or Load Analysis Result
+            const resultArea = document.getElementById('analysis-result');
+            if (analysisCache[symbol]) {
+                resultArea.classList.remove('hidden');
+                resultArea.innerHTML = analysisCache[symbol];
+                resultArea.innerHTML += "\n\n<span class='text-gray-500 text-[10px]'>※ 최신 분석이 필요하면 버튼을 다시 눌러주세요.</span>";
+            } else {
+                resultArea.classList.add('hidden');
+                resultArea.innerText = '';
+            }
+
             modal.classList.remove('modal-hidden');
         }
 
         function closeModal() {
             modal.classList.add('modal-hidden');
             currentSymbol = null;
+            // Clear analysis view to prevent flickering
+            document.getElementById('analysis-result').innerHTML = '';
+            document.getElementById('analysis-result').classList.add('hidden');
         }
 
         async function updateTradeSettings() {
@@ -549,7 +583,7 @@
             const stopPct = parseFloat(document.getElementById('input-stop').value);
 
             if (isNaN(targetPct) || isNaN(stopPct)) {
-                alert("Please enter valid percentages.");
+                alert("유효한 퍼센트 값을 입력해주세요.");
                 return;
             }
 
@@ -567,35 +601,98 @@
                     })
                 });
                 if (res.ok) {
-                    alert('Settings Updated!');
+                    alert('설정 업데이트 완료!');
                     closeModal();
                 } else {
-                    alert('Failed to update settings');
+                    alert('설정 업데이트 실패');
                 }
-            } catch (e) { console.error(e); alert('Error updating settings'); }
+            } catch (e) { console.error(e); alert('설정 업데이트 오류'); }
         }
 
         async function sellTrade() {
-            if (!currentSymbol || !confirm(`Sell ALL positions for ${currentSymbol} at Market Price?`)) return;
+            if (!currentSymbol || !confirm(`${currentSymbol} 종목을 시장가로 전량 매도하시겠습니까?`)) return;
 
             try {
                 // Determine market type from currentTrades
                 const type = currentTrades[currentSymbol].market_type;
-                // Query param is not needed if backend handles it, but my API logic checked type. 
-                // Ah, the API I wrote: sell_trade(symbol, market_type="KR"...). 
-                // I need to pass market_type as query param if it differs from default.
-
                 const url = `/api/trade/${currentSymbol}/sell?market_type=${type}`;
                 const res = await fetch(url, { method: 'POST' });
                 const data = await res.json();
 
                 if (res.ok) {
-                    alert(data.message);
+                    alert("매도 주문 완료: " + data.message);
                     closeModal();
                 } else {
-                    alert("Sell Failed: " + data.detail);
+                    alert("매도 실패: " + data.detail);
                 }
-            } catch (e) { console.error(e); alert('Error executing sell'); }
+            } catch (e) { console.error(e); alert('매도 요청 중 에러 발생'); }
+        }
+
+        // Analysis Cache
+        const analysisCache = {};
+
+        async function analyzeStock() {
+            if (!currentSymbol) return;
+
+            const btn = document.querySelector('button[onclick="analyzeStock()"]');
+            const resultArea = document.getElementById('analysis-result');
+
+            // UI Loading State
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="animate-spin">⌛</span> 분석 중...`;
+            btn.disabled = true;
+            resultArea.classList.add('hidden');
+            resultArea.innerText = '';
+
+            try {
+                const res = await fetch(`/api/analyze/${currentSymbol}`, { method: 'POST' });
+                const data = await res.json();
+
+                resultArea.classList.remove('hidden');
+                if (data.result) {
+                    // Cache the result
+                    analysisCache[currentSymbol] = data.result;
+                    // Display result
+                    resultArea.innerHTML = data.result; // Use innerHTML to render line breaks if any
+                    // Add re-analyze hint
+                    resultArea.innerHTML += "\n\n<span class='text-gray-500'>Make sure to click the button again if you want a fresh analysis.</span>";
+                } else {
+                    resultArea.innerText = "분석 결과를 가져오지 못했습니다.";
+                }
+            } catch (e) {
+                console.error(e);
+                alert("분석 요청 실패");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function calcPricePreview(type) {
+            if (!currentSymbol || !currentTrades[currentSymbol]) return;
+
+            const t = currentTrades[currentSymbol];
+            const buyPrice = t.buy_price;
+
+            if (type === 'target') {
+                const val = parseFloat(document.getElementById('input-target').value);
+                const span = document.getElementById('preview-target');
+                if (!isNaN(val)) {
+                    const price = buyPrice * (1 + val / 100);
+                    span.innerText = `${t.market_type === 'US' ? '$' : ''}${fmt(price)}`;
+                } else {
+                    span.innerText = '';
+                }
+            } else if (type === 'stop') {
+                const val = parseFloat(document.getElementById('input-stop').value);
+                const span = document.getElementById('preview-stop');
+                if (!isNaN(val)) {
+                    const price = buyPrice * (1 - val / 100);
+                    span.innerText = `${t.market_type === 'US' ? '$' : ''}${fmt(price)}`;
+                } else {
+                    span.innerText = '';
+                }
+            }
         }
 
         // Init

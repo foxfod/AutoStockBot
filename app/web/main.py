@@ -150,6 +150,71 @@ async def update_trade(symbol: str, update: TradeUpdate, user=Depends(login_requ
         raise HTTPException(status_code=404, detail="Trade not found")
     return {"status": "success", "message": "Trade settings updated"}
 
+@app.post("/api/analyze/{symbol}")
+async def analyze_trade(symbol: str, user=Depends(login_required)):
+    tm = server_context["trade_manager"]
+    if not tm or symbol not in tm.active_trades:
+         raise HTTPException(status_code=404, detail="Trade not found")
+    
+    trade = tm.active_trades[symbol]
+    market_type = trade.get('market_type', 'KR')
+    excg = trade.get('excg', 'NAS')
+    
+    
+    # 1. Fetch Real-time Data for Analysis
+    from app.core.technical_analysis import technical
+    from app.core.kis_api import kis
+    from app.core.ai_analyzer import ai_analyzer
+    
+    try:
+        # Get Price History for Technicals
+        if market_type == 'US':
+             raw_data = kis.get_overseas_daily_price(symbol, excg_cd=excg)
+             # Map keys for US data
+             daily_candles = []
+             for d in raw_data:
+                 daily_candles.append({
+                     "stck_bsop_date": d['xymd'],
+                     "stck_clpr": d['clos'],
+                     "stck_oprc": d['open'],
+                     "stck_hgpr": d['high'],
+                     "stck_lwpr": d['low'],
+                     "acml_vol": d['tvol']
+                 })
+        else:
+             daily_candles = kis.get_daily_price(symbol)
+
+        if not daily_candles:
+             return {"result": "데이터 부족으로 분석 불가"}
+             
+        # Calculate Technicals
+        tech_summary = technical.analyze(daily_candles)
+        
+        # Get News
+        if market_type == 'US':
+            # US News not yet supported in kis_api.get_news_titles? 
+            # Check kis_api.py... get_overseas_news_titles exists!
+            news = kis.get_overseas_news_titles(symbol)
+            news_list = [n['title'] for n in news[:3]] if news else []
+        else:
+            news = kis.get_news_titles(symbol)
+            news_list = [n['hts_pbnt_titl_cntt'] for n in news[:3]] if news else []
+        
+        # Run AI Analysis
+        report = ai_analyzer.analyze_holding_stock(symbol, trade['name'], tech_summary, news_list)
+        
+        # Prepend Timestamp
+        from datetime import datetime
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        final_report = f"**[분석 일시: {now_str}]**\n\n{report}"
+        
+        return {"result": final_report}
+        
+    except Exception as e:
+        import traceback
+        logging.error(f"Analysis Failed: {traceback.format_exc()}")
+        return {"result": f"분석 중 오류 발생: {str(e)}"}
+
 @app.get("/api/state")
 async def get_state(user=Depends(login_required)):
     """Returns the current bot state and active trades"""
