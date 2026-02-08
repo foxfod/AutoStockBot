@@ -194,7 +194,10 @@ async def get_state(user=Depends(login_required)):
             
             # --- KRW Conversion for US Stocks ---
             if market_type == 'US':
-                rate = tm.exchange_rate
+                # Fix: Get Exchange Rate from Market Info (Default 1450)
+                rate_info = market_info.get('usd_krw', {})
+                rate = float(rate_info.get('price', 1450.0))
+                
                 trade_data['current_price_krw'] = current_price * rate
                 trade_data['value_krw'] = (current_price * qty) * rate
                 trade_data['buy_price_krw'] = buy_price * rate
@@ -208,7 +211,10 @@ async def get_state(user=Depends(login_required)):
                 trade_data['profit_amount'] = (current_price - buy_price) * qty
                 
                 if market_type == 'US':
-                    trade_data['profit_amount_krw'] = trade_data['profit_amount'] * tm.exchange_rate
+                    # Use the rate we fetched above
+                    rate_info = market_info.get('usd_krw', {})
+                    rate = float(rate_info.get('price', 1450.0))
+                    trade_data['profit_amount_krw'] = trade_data['profit_amount'] * rate
                 else:
                     trade_data['profit_amount_krw'] = trade_data['profit_amount']
             else:
