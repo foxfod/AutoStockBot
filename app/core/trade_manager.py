@@ -16,6 +16,7 @@ class TradeManager:
         self.start_balance_krw = 0 
         self.start_balance_usd = 0
         self.trade_history = [] 
+        self.manual_slots = {} # {market_type: count}
 
     def update_balance(self):
         """Fetch latest balance from KIS (KRW & USD)"""

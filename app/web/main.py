@@ -153,87 +153,129 @@ async def update_trade(symbol: str, update: TradeUpdate, user=Depends(login_requ
 @app.get("/api/state")
 async def get_state(user=Depends(login_required)):
     """Returns the current bot state and active trades"""
-    if not server_context["bot_state"] or not server_context["trade_manager"]:
-        return {"status": "loading"}
-    
-    tm = server_context["trade_manager"]
-    
-    # Safely get budget
-    kr_budget = tm.get_available_budget("KR")
-    us_budget = tm.get_target_slot_budget_us() # Approximate
-    
+    try:
+        if not server_context["bot_state"] or not server_context["trade_manager"]:
+            return {"status": "loading"}
+        
+        tm = server_context["trade_manager"]
+        print(f"DEBUG: active_trades type: {type(tm.active_trades)}")
+        if tm.active_trades:
+             print(f"DEBUG: active_trades sample keys: {list(tm.active_trades.keys())}")
+             first_val = next(iter(tm.active_trades.values()))
+             print(f"DEBUG: active_trades first val type: {type(first_val)}")
+             print(f"DEBUG: active_trades first val: {first_val}")
+
+        # Safely get budget
+        kr_budget = tm.get_available_budget("KR")
+        us_budget = tm.get_target_slot_budget_us() # Approximate
+        
     # Market Data
-    market_info = await market_data_manager.get_market_data()
-    
-    # Enrich active trades with real-time data
-    from app.core.kis_api import kis
-    enriched_trades = {}
-    
-    def safe_float(v):
-        try: return float(v)
-        except: return 0.0
+        market_info = await market_data_manager.get_market_data()
+        if market_info is None: market_info = {}
+        
+        # Enrich active trades with real-time data
+        from app.core.kis_api import kis
+        enriched_trades = {}
+        
+        import math
+        def safe_float(v):
+            try: 
+                val = float(v)
+                if math.isnan(val) or math.isinf(val):
+                    return 0.0
+                return val
+            except: return 0.0
 
-    if tm.active_trades:
-        for symbol, trade in tm.active_trades.items():
-            trade_data = trade.copy()
-            market_type = trade.get('market_type', 'KR')
-            price_info = kis.get_realtime_price(symbol, market_type)
-            current_price = 0
-            if price_info:
-                current_price = safe_float(price_info.get('price', 0))
-            if current_price == 0:
-                 current_price = trade.get('buy_price', 0)
-
-            trade_data['current_price'] = current_price
-            
-            qty = int(trade.get('qty', 0))
-            trade_data['quantity'] = qty
-            trade_data['value'] = current_price * qty
-
-            buy_price = safe_float(trade.get('buy_price', 0))
-            
-            # --- KRW Conversion for US Stocks ---
-            if market_type == 'US':
-                # Fix: Get Exchange Rate from Market Info (Default 1450)
-                rate_info = market_info.get('usd_krw', {})
-                rate = float(rate_info.get('price', 1450.0))
-                
-                trade_data['current_price_krw'] = current_price * rate
-                trade_data['value_krw'] = (current_price * qty) * rate
-                trade_data['buy_price_krw'] = buy_price * rate
+        # Sanitize Market Info (Safe Copy)
+        safe_market_info = {}
+        for k, v in market_info.items():
+            if isinstance(v, dict):
+                safe_market_info[k] = {
+                    sk: safe_float(sv) if isinstance(sv, (int, float, str)) else sv 
+                    for sk, sv in v.items()
+                }
             else:
-                trade_data['current_price_krw'] = current_price # Same for KR
-                trade_data['value_krw'] = current_price * qty
-                trade_data['buy_price_krw'] = buy_price
+                safe_market_info[k] = v
+        market_info = safe_market_info
 
-            if buy_price > 0:
-                trade_data['profit_rate'] = ((current_price - buy_price) / buy_price) * 100
-                trade_data['profit_amount'] = (current_price - buy_price) * qty
-                
-                if market_type == 'US':
-                    # Use the rate we fetched above
-                    rate_info = market_info.get('usd_krw', {})
-                    rate = float(rate_info.get('price', 1450.0))
-                    trade_data['profit_amount_krw'] = trade_data['profit_amount'] * rate
-                else:
-                    trade_data['profit_amount_krw'] = trade_data['profit_amount']
-            else:
-                trade_data['profit_rate'] = 0.0
-                trade_data['profit_amount'] = 0.0
-                trade_data['profit_amount_krw'] = 0.0
-                
-            enriched_trades[symbol] = trade_data
-    
-    return {
-        "bot_state": server_context["bot_state"],
-        "is_paused": server_context.get("is_paused", False),
-        "kr_budget": kr_budget,
-        "us_budget": us_budget,
-        "active_trades": enriched_trades,
-        "market_info": market_info,
-        "manual_slots": tm.manual_slots,
-        "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
+        if tm.active_trades:
+            for symbol, trade in tm.active_trades.items():
+                try:
+                    trade_data = trade.copy()
+                    market_type = trade.get('market_type', 'KR')
+                    
+                    try:
+                        price_info = kis.get_realtime_price(symbol, market_type)
+                    except Exception as e:
+                        print(f"Error fetching price for {symbol}: {e}")
+                        price_info = None
+
+                    current_price = 0
+                    if price_info:
+                        current_price = safe_float(price_info.get('price', 0))
+                    if current_price == 0:
+                         current_price = safe_float(trade.get('buy_price', 0))
+
+                    trade_data['current_price'] = current_price
+                    
+                    qty = int(trade.get('qty', 0))
+                    trade_data['quantity'] = qty
+                    trade_data['value'] = current_price * qty
+
+                    buy_price = safe_float(trade.get('buy_price', 0))
+                    
+                    # --- KRW Conversion for US Stocks ---
+                    if market_type == 'US':
+                        # Fix: Get Exchange Rate from Market Info (Default 1450)
+                        rate_info = market_info.get('usd_krw', {})
+                        rate = float(rate_info.get('price', 1450.0))
+                        
+                        trade_data['current_price_krw'] = current_price * rate
+                        trade_data['value_krw'] = (current_price * qty) * rate
+                        trade_data['buy_price_krw'] = buy_price * rate
+                    else:
+                        trade_data['current_price_krw'] = current_price # Same for KR
+                        trade_data['value_krw'] = current_price * qty
+                        trade_data['buy_price_krw'] = buy_price
+
+                    if buy_price > 0:
+                        trade_data['profit_rate'] = ((current_price - buy_price) / buy_price) * 100
+                        trade_data['profit_amount'] = (current_price - buy_price) * qty
+                        
+                        if market_type == 'US':
+                            # Use the rate we fetched above
+                            rate_info = market_info.get('usd_krw', {})
+                            rate = float(rate_info.get('price', 1450.0))
+                            trade_data['profit_amount_krw'] = trade_data['profit_amount'] * rate
+                        else:
+                            trade_data['profit_amount_krw'] = trade_data['profit_amount']
+                    else:
+                        trade_data['profit_rate'] = 0.0
+                        trade_data['profit_amount'] = 0.0
+                        trade_data['profit_amount_krw'] = 0.0
+                        
+                    enriched_trades[symbol] = trade_data
+                except Exception as e:
+                    print(f"Error processing trade {symbol}: {e}")
+                    # Keep original data if processing failed
+                    enriched_trades[symbol] = trade
+        
+        return {
+            "bot_state": server_context["bot_state"],
+            "is_paused": server_context.get("is_paused", False),
+            "kr_budget": safe_float(kr_budget),
+            "us_budget": safe_float(us_budget),
+            "active_trades": enriched_trades,
+            "market_info": market_info,
+            "manual_slots": tm.manual_slots,
+            "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        # print(f"ERROR in get_state: {error_msg}") # Print to stdout for user to see
+        logging.error(f"ERROR in get_state: {error_msg}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # === Control Endpoints ===
 
