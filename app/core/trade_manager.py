@@ -389,11 +389,12 @@ class TradeManager:
                     logger.warning(f"Insufficient KRW for {name}. Invest: {invest_amt:,.0f} < Min 10k. Cash: {current_kr_cash:,.0f}")
                     continue
                 
-                # Safety Buffer for KR: 95% of allocated amount for Market Order volatility
-                safe_invest_amt = invest_amt * 0.95
-                qty = int(safe_invest_amt // current_price)
+                # Safety Buffer for KR: Market Order requires Upper Limit Price (+30%) Cash
+                # Calculate qty based on Upper Limit Buffer to avoid "Insufficient Funds"
+                upper_limit_proxy = current_price * 1.3
+                qty = int(safe_invest_amt // upper_limit_proxy)
                 
-                logger.info(f"🇰🇷 KR Buy Calc: Invest={invest_amt:,.0f} -> Safe={safe_invest_amt:,.0f} / Price={current_price:,.0f} = {qty} sh")
+                logger.info(f"🇰🇷 KR Buy Calc: Invest={invest_amt:,.0f} -> Safe={safe_invest_amt:,.0f} / (Price*1.3)={upper_limit_proxy:,.0f} = {qty} sh")
 
             if qty == 0:
                 logger.warning(f"Skipping {name}: Qty is 0. Invest: {invest_amt:,.0f} < Price: {current_price:,.0f}")
