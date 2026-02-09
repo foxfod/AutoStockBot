@@ -34,4 +34,12 @@
 ### [v.20260209_010-06] 대시보드 콘솔 에러 수정 (Console Fix)
 - **문제**: 대시보드 로딩 시 `fetchState is not defined`, `logContainer is not defined` 에러 발생.
 - **수정**:
-    - `dashboard.html`: 스크립트 초기화 순서 조정 및 `logContainer` 변수 선언 추가.
+### [v.20260209_010-07] 동시 주문 시 잔고 부족 오류 수정 (Multi-Buy Insufficient Funds Fix)
+- **문제**: 여러 종목 동시 매수 시, API 잔고 갱신 지연으로 인해 초기 잔고 기준으로 중복 계산되어 주문 거부 발생.
+- **수정**:
+    - `trade_manager.py`: 매수 루프 내에서 잔고를 실시간으로 차감(`current_kr_cash`)하여 다음 종목 계산에 반영.
+    - API `update_balance` 호출을 루프 내부에서 제거하여 Stale Data 참조 방지.
+
+### [v.20260209_010-08] AI 분석 정확도 향상 (AI Accuracy)
+- **문제**: AI 분석 시 시장 환경 정보(Market Context)가 누락되어, 하락장에서도 공격적인 매수를 추천함.
+- **수정**: `ai_analyzer.py` 프롬프트에 시장 상태(Bull/Bear)를 주입하고, 하락장 시 보수적 기준을 적용하도록 로직 개선.

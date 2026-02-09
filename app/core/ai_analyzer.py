@@ -166,7 +166,11 @@ class AIAnalyzer:
             return {}
             
         # Construct Batch Prompt
-        prompt = "Analyze the following stocks for scalping opportunities at market open.\n"
+        # Extract Market Context from the first job (Batch shares same market context)
+        market_context = jobs[0].get('market_status', 'Neutral Market')
+        
+        prompt = f"Current Market Environment: {market_context}\n\n"
+        prompt += "Analyze the following stocks for scalping opportunities at market open.\n"
         prompt += "Return a JSON Object where keys are 'symbols' and values are analysis results.\n"
         prompt += "Format: { 'SYMBOL': { 'score': ..., 'reason': ..., 'action': ..., 'strategy': ... } }\n\n"
         
@@ -180,11 +184,14 @@ class AIAnalyzer:
         prompt += """
         Criteria:
         1. Score 0-100 (80+ Strong Buy, 60+ Watch, <60 Pass).
-        2. Daily Change Penalties:
-           - IF > 10%: Apply CAUTION (Slight Penalty). Upside may be decreasing.
-           - IF > 20%: Apply HEAVY PENALTY (High Risk). Only select if momentum is extremely strong.
-        3. Penalize if RSI > 75 or Trend is Down.
-        4. "reason" MUST be in Korean (Hangul).
+        2. Market Context Adaptation:
+           - IF Market is "BEAR" or "Down": Be VERY CONSERVATIVE. Require strong news catalyst. Score < 70 if no news.
+           - IF Market is "BULL" or "Up": Focus on momentum.
+        3. Daily Change Penalties:
+           - IF > 10%: Apply CAUTION.
+           - IF > 20%: HEAVY PENALTY (High Risk).
+        4. Penalize if RSI > 75 or Trend is Down (unless contrarian play with news).
+        5. "reason" MUST be in Korean (Hangul).
         """
         
         # Call GPT (Primary) -> Gemini (Fallback)

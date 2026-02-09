@@ -276,6 +276,10 @@ class TradeManager:
         if not selected_stocks:
             return
 
+        # Local Cash Tracking (To prevent over-spending in same batch due to API latency)
+        current_kr_cash = self.capital_krw
+        current_us_cash = self.capital_usd
+
         for stock in selected_stocks:
             symbol = stock['symbol']
             name = stock['name']
@@ -307,11 +311,12 @@ class TradeManager:
             # Allocation Logic (Based on Total Equity to keep slots equal)
             if market_type == "US":
                 # Unified Margin Support: Calculate total buying power (USD + KRW)
-                buying_power = self.capital_usd
-                if buying_power < 20 and self.capital_krw > 30000:
-                     buying_power += self.capital_krw / 1450
+                buying_power = current_us_cash # Use Local Tracker
+                if buying_power < 20 and current_kr_cash > 30000:
+                     buying_power += current_kr_cash / 1450
                 
                 # Estimate Total USD Equity (Holdings + Buying Power)
+                # Note: self.total_asset_usd might be slightly stale but acceptable for Slot Calc
                 base_equity = max(self.total_asset_usd, buying_power)
                 
                 # --- Explicit Slot Limit Logic ---
@@ -375,13 +380,13 @@ class TradeManager:
                 # Dynamic Allocation based on Remaining Slots (Split remaining cash equally)
                 # e.g., If 3 slots left and 3M KRW cash -> 1M per slot.
                 if remaining_slots > 0:
-                     invest_amt = (self.capital_krw * 0.95) / remaining_slots # 95% of Capital already considered? No, capital_krw returns full Orderable.
+                     invest_amt = (current_kr_cash * 0.95) / remaining_slots # Use Local Tracker
                 else:
                      invest_amt = 0
                 
                 # Check Min Amount
                 if invest_amt < 10000: # Min 10,000 KRW
-                    logger.warning(f"Insufficient KRW for {name}. Invest: {invest_amt:,.0f} < Min 10k. Cash: {self.capital_krw:,.0f}")
+                    logger.warning(f"Insufficient KRW for {name}. Invest: {invest_amt:,.0f} < Min 10k. Cash: {current_kr_cash:,.0f}")
                     continue
                 
                 # Safety Buffer for KR: 95% of allocated amount for Market Order volatility
@@ -495,12 +500,14 @@ class TradeManager:
                 # Update Wallet Balance Locally (to prevent over-spending in same batch)
                 spent_amount = qty * buy_price
                 if market_type == "US":
-                    self.capital_usd = max(0, self.capital_usd - spent_amount)
-                    logger.info(f"Local Wallet Update: -${spent_amount:.2f} (Rem: ${self.capital_usd:.2f})")
+                    current_us_cash = max(0, current_us_cash - spent_amount)
+                    self.capital_usd = current_us_cash
+                    logger.info(f"Local Wallet Update: -${spent_amount:.2f} (Rem: ${current_us_cash:.2f})")
                 else:
                     fees = spent_amount * 0.00015 # Approx fees
-                    self.capital_krw = max(0, self.capital_krw - (spent_amount + fees))
-                    logger.info(f"Local Wallet Update: -{spent_amount:,.0f} KRW (Rem: {self.capital_krw:,.0f})")
+                    current_kr_cash = max(0, current_kr_cash - (spent_amount + fees))
+                    self.capital_krw = current_kr_cash
+                    logger.info(f"Local Wallet Update: -{spent_amount:,.0f} KRW (Rem: {current_kr_cash:,.0f})")
                 
                 # Subscribe to WebSocket for real-time monitoring
                 if kis.websocket and kis.websocket.is_connected:
@@ -510,8 +517,8 @@ class TradeManager:
                 # Send Status Update
                 bot.send_message(self.get_account_status_str())
                 
-                # Refresh Balance for next iteration
-                self.update_balance()
+                # Refresh Balance for next iteration (DISABLED to prevent race condition with KIS API)
+                # self.update_balance()
 
             else:
                 bot.send_message(f"❌ 매수 실패 ({name}): {res.get('error')}")
