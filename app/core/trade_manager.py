@@ -390,6 +390,8 @@ class TradeManager:
                     continue
                 
                 # Safety Buffer for KR: Market Order requires Upper Limit Price (+30%) Cash
+                safe_invest_amt = invest_amt * 0.95
+                
                 # Calculate qty based on Upper Limit Buffer to avoid "Insufficient Funds"
                 upper_limit_proxy = current_price * 1.3
                 qty = int(safe_invest_amt // upper_limit_proxy)
