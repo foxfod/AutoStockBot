@@ -649,6 +649,68 @@ class TradeManager:
                     logger.error(f"❌ Sell order failed for {name}: {res.get('error')}")
                     bot.send_message(f"⚠️ 매도 실패 ({name}): {res.get('error')}")
 
+    def sell_position(self, symbol: str, market_type: str = "KR"):
+        """
+        Manually Sell a specific position (Market Price).
+        Called from Dashboard.
+        """
+        if symbol not in self.active_trades:
+            logger.warning(f"Sell Request for unknown symbol: {symbol}")
+            return {"error": "Trade not found"}
+
+        try:
+            trade = self.active_trades[symbol]
+            name = trade['name'] # Using name stored in trade for consistency
+            qty = trade['quantity']
+            
+            # 1. Execute Sell Order (Market Price)
+            if market_type == "US":
+                excg = trade.get('excg', 'NAS')
+                # US Market Sell: Price = 0
+                res = kis.sell_overseas_order(symbol, qty, price=0, excg_cd=excg)
+            else:
+                # KR Market Sell: Price = 0
+                res = kis.sell_order(symbol, qty, price=0)
+            
+            # 2. Handle Result
+            if "error" in res:
+                return {"error": res['error']}
+            
+            # 3. Post-Process (Success)
+            # Fetch execution price if available immediately, or use current price estimate
+            # Since market order, actual price is determined at execution.
+            # We can use current price for estimation or wait for execution message (async).
+            # Here we just mark it as sold.
+            
+            sell_price = float(trade['current_price']) # Estimate
+            profit_rate = (sell_price - trade['buy_price']) / trade['buy_price'] * 100
+            
+            msg = f"🚨 대시보드 강제 매도: {name}\n수익률: {profit_rate:.2f}% (추정)"
+            bot.send_message(msg)
+            
+            # Update History
+            trade['sell_price'] = sell_price
+            trade['profit_rate'] = profit_rate
+            trade['result'] = "MANUAL SELL"
+            trade['sell_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            self.trade_history.append(trade)
+            self.save_history()
+            
+            # Unsubscribe
+            if kis.websocket:
+                kis.websocket.unsubscribe_stock(symbol)
+            
+            # Remove from Active
+            del self.active_trades[symbol]
+            self.update_balance()
+            
+            logger.info(f"Manual Sell Executed for {name}")
+            return {"status": "success", "message": "Order Placed"}
+            
+        except Exception as e:
+            logger.error(f"Manual Sell Error: {e}")
+            return {"error": str(e)}
 
     def monitor_risks(self, market_filter="ALL"):
         """
