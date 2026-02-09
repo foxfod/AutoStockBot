@@ -29,28 +29,29 @@ class KisApi:
             headers["tr_id"] = tr_id
         return headers
 
-    def get_access_token(self):
+    def get_access_token(self, force=False):
         """Get or refresh access token (with File Persistence)"""
         TOKEN_FILE = "kis_token_v2.json"
         
-        # 1. Try to load from file
-        try:
-            with open(TOKEN_FILE, "r") as f:
-                data = json.load(f)
-                saved_token = data.get("access_token")
-                saved_expiry = data.get("token_expired", 0)
-                
-                if saved_token and time.time() < saved_expiry:
-                    self.access_token = saved_token
-                    self.token_expired = saved_expiry
-                    # logger.info("KIS Access Token Loaded from File (Valid)")
-                    return self.access_token
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass # File doesn't exist or corrupt, fetch new
+        # 1. Try to load from file (skip if force=True)
+        if not force:
+            try:
+                with open(TOKEN_FILE, "r") as f:
+                    data = json.load(f)
+                    saved_token = data.get("access_token")
+                    saved_expiry = data.get("token_expired", 0)
+                    
+                    if saved_token and time.time() < saved_expiry:
+                        self.access_token = saved_token
+                        self.token_expired = saved_expiry
+                        # logger.info("KIS Access Token Loaded from File (Valid)")
+                        return self.access_token
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass # File doesn't exist or corrupt, fetch new
             
-        # 2. If memory token is valid, use it
-        if self.access_token and time.time() < self.token_expired:
-            return self.access_token
+            # 2. If memory token is valid, use it
+            if self.access_token and time.time() < self.token_expired:
+                return self.access_token
 
         # 3. Request New Token
         url = f"{self.base_url}/oauth2/tokenP"
@@ -336,6 +337,14 @@ class KisApi:
         
         res = requests.get(url, headers=headers, params=params, timeout=20)
         data = res.json()
+        
+        if data.get('msg_cd') == 'EGW00123':
+            logger.warning("Token Expired (EGW00123) in get_my_stock_balance. Refreshing...")
+            self.get_access_token(force=True)
+            headers = self._get_headers(tr_id=tr_id)
+            res = requests.get(url, headers=headers, params=params, timeout=20)
+            data = res.json()
+            
         if res.status_code == 200 and 'output1' in data:
             return data['output1'] # List of holdings
     def get_orderable_cash(self):
@@ -405,6 +414,13 @@ class KisApi:
         res = requests.post(url, headers=headers, json=body, timeout=20)
         data = res.json()
         
+        if data.get('msg_cd') == 'EGW00123':
+            logger.warning("Token Expired (EGW00123) in buy_order. Refreshing...")
+            self.get_access_token(force=True)
+            headers = self._get_headers(tr_id=tr_id)
+            res = requests.post(url, headers=headers, json=body, timeout=20)
+            data = res.json()
+        
         if res.status_code == 200 and data['rt_cd'] == '0':
             return data['output'] # Contains 'KRX_FWDG_ORD_ORGNO' (Order ID)
         
@@ -437,6 +453,13 @@ class KisApi:
         
         res = requests.post(url, headers=headers, json=body, timeout=20)
         data = res.json()
+        
+        if data.get('msg_cd') == 'EGW00123':
+            logger.warning("Token Expired (EGW00123) in sell_order. Refreshing...")
+            self.get_access_token(force=True)
+            headers = self._get_headers(tr_id=tr_id)
+            res = requests.post(url, headers=headers, json=body, timeout=20)
+            data = res.json()
         
         if res.status_code == 200 and data['rt_cd'] == '0':
             return data['output']
@@ -631,6 +654,14 @@ class KisApi:
             res = requests.get(url, headers=headers, params=params, timeout=20)
             data = res.json()
             
+            # Token Expiration Check & Retry
+            if data.get('msg_cd') == 'EGW00123':
+                logger.warning(f"⚠️ Token Expired (EGW00123) on {excg}. Force refreshing token...")
+                self.get_access_token(force=True)
+                headers = self._get_headers(tr_id=tr_id) # Update headers with new token
+                res = requests.get(url, headers=headers, params=params, timeout=20)
+                data = res.json()
+            
             if res.status_code == 200 and 'output2' in data:
                 # Merge holdings from all exchanges
                 if data.get('output1'):
@@ -705,6 +736,13 @@ class KisApi:
         res = requests.post(url, headers=headers, json=body, timeout=20)
         data = res.json()
         
+        if data.get('msg_cd') == 'EGW00123':
+            logger.warning("Token Expired (EGW00123) in buy_overseas_order. Refreshing...")
+            self.get_access_token(force=True)
+            headers = self._get_headers(tr_id=tr_id)
+            res = requests.post(url, headers=headers, json=body, timeout=20)
+            data = res.json()
+        
         if res.status_code == 200 and data['rt_cd'] == '0':
             return data['output']
         
@@ -739,6 +777,13 @@ class KisApi:
         
         res = requests.post(url, headers=headers, json=body, timeout=20)
         data = res.json()
+        
+        if data.get('msg_cd') == 'EGW00123':
+            logger.warning("Token Expired (EGW00123) in sell_overseas_order. Refreshing...")
+            self.get_access_token(force=True)
+            headers = self._get_headers(tr_id=tr_id)
+            res = requests.post(url, headers=headers, json=body, timeout=20)
+            data = res.json()
         
         if res.status_code == 200 and data['rt_cd'] == '0':
             return data['output']
