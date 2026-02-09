@@ -345,7 +345,15 @@ class TradeManager:
                 if invest_amt < 20: # Min $20
                     logger.warning(f"Insufficient USD for {name} ({invest_amt:.2f}).")
                     continue
-                qty = int(invest_amt // current_price)
+                
+                # Safety Buffer for US: 98% of invest_amt, Price is 1.01x (Limit)
+                # This ensures we cover the +1% price buffer limit order AND fees.
+                safe_invest_amt = invest_amt * 0.98
+                limit_price = current_price * 1.01
+                qty = int(safe_invest_amt // limit_price)
+                
+                logger.info(f"🇺🇸 US Buy Calc: Invest=${invest_amt:.2f} -> Safe=${safe_invest_amt:.2f} / Limit=${limit_price:.2f} = {qty} sh")
+
             else:
                 # KR Market Allocation
                 # Calculate remaining slots for KR
@@ -367,7 +375,7 @@ class TradeManager:
                 # Dynamic Allocation based on Remaining Slots (Split remaining cash equally)
                 # e.g., If 3 slots left and 3M KRW cash -> 1M per slot.
                 if remaining_slots > 0:
-                     invest_amt = (self.capital_krw * 0.95) / remaining_slots
+                     invest_amt = (self.capital_krw * 0.95) / remaining_slots # 95% of Capital already considered? No, capital_krw returns full Orderable.
                 else:
                      invest_amt = 0
                 
@@ -375,7 +383,12 @@ class TradeManager:
                 if invest_amt < 10000: # Min 10,000 KRW
                     logger.warning(f"Insufficient KRW for {name}. Invest: {invest_amt:,.0f} < Min 10k. Cash: {self.capital_krw:,.0f}")
                     continue
-                qty = int(invest_amt // current_price)
+                
+                # Safety Buffer for KR: 95% of allocated amount for Market Order volatility
+                safe_invest_amt = invest_amt * 0.95
+                qty = int(safe_invest_amt // current_price)
+                
+                logger.info(f"🇰🇷 KR Buy Calc: Invest={invest_amt:,.0f} -> Safe={safe_invest_amt:,.0f} / Price={current_price:,.0f} = {qty} sh")
 
             if qty == 0:
                 logger.warning(f"Skipping {name}: Qty is 0. Invest: {invest_amt:,.0f} < Price: {current_price:,.0f}")
