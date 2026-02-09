@@ -62,7 +62,7 @@ US_CLOSE = dtime(6, 0)
 
 SCAN_INTERVAL = 10 # 10 Minutes
 MAX_TRADES = 3
-VERSION = "20260209_010-12"
+VERSION = "20260209_010-13"
 
 state = {
     "kr_liquidation_done": False,
@@ -72,7 +72,9 @@ state = {
     "last_scan_time": datetime.min,
     "last_risk_check_time": datetime.min,
     "kr_market_closed": False, # Circuit Breaker for KR
-    "us_market_closed": False  # Circuit Breaker for US
+    "us_market_closed": False,  # Circuit Breaker for US
+    "kr_pre_market_done": False,
+    "us_pre_market_done": False
 }
 server_context["log_queue"] = log_queue
 server_context["bot_state"] = state
@@ -143,7 +145,8 @@ async def trading_loop():
                     state['us_liquidation_done'] = False
                     state['us_report_sent'] = False
                     state['us_market_closed'] = False # Reset US Breaker
-                
+                    state['us_pre_market_done'] = False # Reset
+
                 # Check Market Open (Weekend/Holiday)
                 is_open, reason = check_market_open("KR")
                 if not is_open:
@@ -151,6 +154,11 @@ async def trading_loop():
                         logger.info(f"KR Market Check: Closed ({reason}). Sleeping...")
                     await asyncio.sleep(1)
                     continue
+
+                # 0. Pre-Market Analysis (08:30 ~ 08:50)
+                if is_time_in_range(KR_START, dtime(8, 50), t) and not state['kr_pre_market_done']:
+                     await selector.select_pre_market_picks("KR")
+                     state['kr_pre_market_done'] = True
 
                 # 1. Scanning
                 time_since = (now - state['last_scan_time']).total_seconds() / 60
@@ -234,6 +242,7 @@ async def trading_loop():
                     state['kr_liquidation_done'] = False
                     state['kr_report_sent'] = False
                     state['kr_market_closed'] = False # Reset KR Breaker
+                    state['kr_pre_market_done'] = False # Reset
 
                 # Check Market Open (Weekend/Holiday)
                 is_open, reason = check_market_open("US")
@@ -242,6 +251,11 @@ async def trading_loop():
                          logger.info(f"US Market Check: Closed ({reason}). Sleeping...")
                      await asyncio.sleep(1)
                      continue
+                
+                # 0. Pre-Market Analysis (22:00 ~ 22:30)
+                if is_time_in_range(US_START, dtime(22, 30), t) and not state['us_pre_market_done']:
+                     await selector.select_pre_market_picks("US")
+                     state['us_pre_market_done'] = True
 
                 # 1. Scanning
                 time_since = (now - state['last_scan_time']).total_seconds() / 60

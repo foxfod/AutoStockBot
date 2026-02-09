@@ -10,6 +10,134 @@ class Selector:
     def __init__(self):
         pass
 
+    async def select_pre_market_picks(self, market_type="KR"):
+        """
+        Pre-Market Top 10 Selection (30 mins before open).
+        Analyzes Market Context + News + Technicals to pick 10 promising stocks.
+        """
+        import json
+        import os
+        from datetime import datetime
+        from app.core.technical_analysis import technical
+        from app.core.market_analyst import market_analyst
+        from app.core.telegram_bot import bot
+
+        TOP_PICKS_FILE = "app/data/top_picks.json"
+        
+        # Check if already done today
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        try:
+            if os.path.exists(TOP_PICKS_FILE):
+                with open(TOP_PICKS_FILE, "r", encoding='utf-8') as f:
+                    data = json.load(f)
+                    if data.get("date") == today_str and data.get("market") == market_type:
+                        logger.info(f"Pre-Market Picks for {market_type} already exist.")
+                        return data.get("picks", [])
+        except Exception as e:
+            logger.error(f"Failed to load top picks: {e}")
+
+        bot.send_message(f"🌅 [{market_type}] 장전 Top 10 유망 종목 분석 시작...")
+        
+        # 1. Get Candidates
+        candidates = []
+        if market_type == "KR":
+            # KR: Use Volume Rank (Yesterday's Leaders)
+            raw_candidates = kis.get_volume_rank()
+            if raw_candidates:
+                # Filter ETFs
+                exclusion_keywords = ["KODEX", "TIGER", "KBSTAR", "SOL", "ACE", "HANARO", "KOSEF", "ARIRANG", "ETN", "스팩", "선물", "레버리지", "인버스"]
+                for stock in raw_candidates:
+                    if not any(k in stock['hts_kor_isnm'] for k in exclusion_keywords):
+                        candidates.append({
+                            "symbol": stock['mksc_shrn_iscd'],
+                            "name": stock['hts_kor_isnm'],
+                            "market": "KR"
+                        })
+                candidates = candidates[:30] # Top 30
+        else:
+            # US: Use Fixed List (Tech/Volatility)
+            # We need to access the hardcoded list from select_us_stocks, or duplicate it.
+            # For simplicity, let's duplicate the key ones or define a shared list.
+            # I'll extract it from the method below later, for now let's use a subset.
+            # Actually, let's use the full list defined in select_us_stocks.
+            # Since I can't easily import a local var, I'll copy the list structure here. 
+            pass # Pending US List Copy
+            
+        if not candidates and market_type == "US":
+             # Temporary: Define US List here (Subset of main list)
+             candidates = [
+                {"symbol": "NVDA", "excg": "NASD", "name": "NVIDIA"},
+                {"symbol": "TSLA", "excg": "NASD", "name": "Tesla"},
+                {"symbol": "AAPL", "excg": "NASD", "name": "Apple"},
+                {"symbol": "MSFT", "excg": "NASD", "name": "Microsoft"},
+                {"symbol": "AMD", "excg": "NASD", "name": "AMD"},
+                {"symbol": "PLTR", "excg": "NYSE", "name": "Palantir"},
+                {"symbol": "COIN", "excg": "NASD", "name": "Coinbase"},
+                {"symbol": "MARA", "excg": "NASD", "name": "Marathon Digital"},
+                {"symbol": "NET", "excg": "NYSE", "name": "Cloudflare"},
+                {"symbol": "IONQ", "excg": "NYSE", "name": "IonQ"},
+                {"symbol": "SOXL", "excg": "NYSE", "name": "Direxion Daily Semi Bull 3X"},
+                {"symbol": "TQQQ", "excg": "NASD", "name": "ProShares UltraPro QQQ"}
+             ]
+             
+        # 2. Analyze Candidates
+        bot.send_message(f"🔬 후보 {len(candidates)}개 심층 분석 중 (뉴스+차트)...")
+        
+        scored_candidates = []
+        for stock in candidates:
+            symbol = stock['symbol']
+            name = stock['name']
+            
+            # API Rate Limit
+            time.sleep(0.1)
+            
+            # Data Fetch
+            if market_type == "KR":
+                daily_data = kis.get_daily_price(symbol)
+                news = kis.get_news_titles(symbol)
+            else:
+                excg = stock.get('excg', 'NASD')
+                daily_data = kis.get_overseas_daily_price(symbol, excg)
+                news = kis.get_overseas_news_titles(symbol) # Might need impl check
+                
+            if not daily_data: continue
+            
+            # Technical Analysis
+            tech = technical.analyze(daily_data)
+            
+            # Assess via AI
+            reason, score = await ai_analyzer.analyze_stock(stock, daily_data, news, tech, market_type)
+            
+            if score >= 70:
+                stock['reason'] = reason
+                stock['score'] = score
+                scored_candidates.append(stock)
+                
+        # 3. Sort & Select Top 10
+        scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+        top_10 = scored_candidates[:10]
+        
+        # 4. Save to File
+        try:
+            os.makedirs("app/data", exist_ok=True)
+            with open(TOP_PICKS_FILE, "w", encoding='utf-8') as f:
+                json.dump({
+                    "date": today_str,
+                    "market": market_type,
+                    "picks": top_10
+                }, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save top picks: {e}")
+            
+        # 5. Report
+        msg = f"🌟 [{market_type}] 오늘의 Top 10 유망 종목\n"
+        for i, s in enumerate(top_10, 1):
+            msg += f"{i}. {s['name']} ({s['symbol']}) - {s['score']}점\n"
+        bot.send_message(msg)
+        
+        return top_10
+
     async def select_stocks(self, budget=None, target_count=3):
         """
         Main logic to select stocks for scalping (Async Optimized).
@@ -30,25 +158,61 @@ class Selector:
         logger.info(f"Starting stock selection (Budget: {budget:,.0f} KRW, Target: {target_count})...")
         bot.send_message(f"🔍 종목 선정 시작 (예산: {budget:,.0f}원, 목표: {target_count}개)")
         
+        # 0.5 Load Pre-Market Picks
+        import json
+        import os
+        from datetime import datetime
+        TOP_PICKS_FILE = "app/data/top_picks.json"
+        pre_market_picks = []
+        
+        try:
+            if os.path.exists(TOP_PICKS_FILE):
+                with open(TOP_PICKS_FILE, "r", encoding='utf-8') as f:
+                    data = json.load(f)
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    if data.get("date") == today_str and data.get("market") == "KR":
+                        pre_market_picks = data.get("picks", [])
+                        logger.info(f"Loaded {len(pre_market_picks)} Pre-Market Picks for KR.")
+                        bot.send_message(f"📂 장전 Top 10 종목 {len(pre_market_picks)}개를 후보에 추가합니다.")
+        except Exception as e:
+            logger.error(f"Failed to load top picks: {e}")
+
         # 1. Get Candidates (Volume Rank)
         candidates = kis.get_volume_rank()
         if not candidates:
             msg = "❌ 거래량 상위 종목 조회 실패 (후보 없음)"
             logger.warning(msg)
-            bot.send_message(msg)
-            return []
+            # If volume rank fails but we have picks, use them
+            if not pre_market_picks:
+                bot.send_message(msg)
+                return []
+            candidates = [] 
 
         # Filter out ETFs, ETNs, Futures, SPACs
         filtered_candidates = []
         exclusion_keywords = ["KODEX", "TIGER", "KBSTAR", "SOL", "ACE", "HANARO", "KOSEF", "ARIRANG", "ETN", "스팩", "선물", "레버리지", "인버스"]
         
+        # Add Pre-Market Picks First (Priority)
+        existing_symbols = set()
+        for pick in pre_market_picks:
+            filtered_candidates.append({
+                'mksc_shrn_iscd': pick['symbol'],
+                'hts_kor_isnm': pick['name'],
+                'is_pre_pick': True # Mark as priority
+            })
+            existing_symbols.add(pick['symbol'])
+            
         for stock in candidates:
+            symbol = stock['mksc_shrn_iscd']
+            if symbol in existing_symbols: continue
+            
             name = stock['hts_kor_isnm']
             if any(keyword in name for keyword in exclusion_keywords):
                 continue
             filtered_candidates.append(stock)
+            existing_symbols.add(symbol)
             
-        logger.info(f"Filtered {len(candidates) - len(filtered_candidates)} items (ETF/ETN/Futures). Remaining: {len(filtered_candidates)}")
+        logger.info(f"Filtered {len(candidates) - (len(filtered_candidates) - len(pre_market_picks))} items. Total Candidates: {len(filtered_candidates)}")
         
         # Report Top 20 Candidates
         top_20 = filtered_candidates[:20]
@@ -233,9 +397,44 @@ class Selector:
         
         logger.info(f"Starting US stock selection (Budget: {budget if budget else 'N/A'} USD)...")
         
+        # 0.5 Load Pre-Market Picks
+        import json
+        import os
+        from datetime import datetime
+        TOP_PICKS_FILE = "app/data/top_picks.json"
+        pre_market_picks = []
+        
+        try:
+            if os.path.exists(TOP_PICKS_FILE):
+                with open(TOP_PICKS_FILE, "r", encoding='utf-8') as f:
+                    data = json.load(f)
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    if data.get("date") == today_str and data.get("market") == "US":
+                        pre_market_picks = data.get("picks", [])
+                        logger.info(f"Loaded {len(pre_market_picks)} Pre-Market Picks for US.")
+                        bot.send_message(f"📂 장전 Top 10 종목 {len(pre_market_picks)}개를 후보에 추가합니다.")
+        except Exception as e:
+            logger.error(f"Failed to load top picks: {e}")
+
         # Expanded Candidates (50+ Stocks - No ETFs)
         # Diverse sectors: Tech, Healthcare, Finance, Energy, Consumer, Industrial
-        us_candidates = [
+        us_candidates = []
+        
+        # Add Pre-Market Picks First
+        existing_symbols = set()
+        for pick in pre_market_picks:
+             # Identify Exchange if possible, default NASD
+             excg = pick.get('excg', 'NASD') 
+             us_candidates.append({
+                 "symbol": pick['symbol'],
+                 "excg": excg,
+                 "name": pick['name'],
+                 "is_pre_pick": True
+             })
+             existing_symbols.add(pick['symbol'])
+
+        # Default List
+        default_list = [
             # === MEGA CAP TECH (High Liquidity) ===
             {"symbol": "NVDA", "excg": "NASD", "name": "NVIDIA"},
             {"symbol": "TSLA", "excg": "NASD", "name": "Tesla"},
@@ -323,6 +522,14 @@ class Selector:
             {"symbol": "DOCU", "excg": "NASD", "name": "DocuSign"},
             {"symbol": "U", "excg": "NYSE", "name": "Unity Software"},
         ]
+        
+        # Merge Default List (if not already added)
+        for stock in default_list:
+            if stock['symbol'] not in existing_symbols:
+                us_candidates.append(stock)
+                existing_symbols.add(stock['symbol'])
+        
+        logger.info(f"US Candidates: {len(us_candidates)} items (Pre-Picks: {len(pre_market_picks)})")
         
         analysis_jobs = []
         
