@@ -283,6 +283,16 @@ async def get_state(user=Depends(login_required)):
 
                     trade_data['current_price'] = current_price
                     
+                    # Calculate Daily Change
+                    prev_close = 0
+                    if price_info:
+                        prev_close = safe_float(price_info.get('prev_close', 0))
+                    
+                    if prev_close > 0:
+                        trade_data['daily_change'] = ((current_price - prev_close) / prev_close) * 100
+                    else:
+                        trade_data['daily_change'] = 0.0
+
                     qty = int(trade.get('qty', 0))
                     trade_data['quantity'] = qty
                     trade_data['value'] = current_price * qty

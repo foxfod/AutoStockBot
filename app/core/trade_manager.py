@@ -199,6 +199,10 @@ class TradeManager:
                     buy_price = float(stock.get('pchs_avg_pric', 0))
                     excg = stock.get('ovrs_excg_cd', 'NAS')
                     
+                    # DEBUG: Log raw keys for the first item to verify API field names
+                    if holdings_list.index(stock) == 0:
+                        logger.debug(f"🔍 First US Stock Raw Keys: {stock.keys()}")
+                    
                     logger.debug(f"  📊 Processing: {symbol} ({name}), Qty={qty}, Price={buy_price}, Excg={excg}")
 
                     if qty > 0 and symbol not in self.active_trades:
@@ -544,6 +548,20 @@ class TradeManager:
             
             logger.debug(f"📊 {name}: Current=${current_price:.2f}, Buy=${buy_price:.2f}, "
                         f"P&L={profit_rate:.2f}%, StopLoss=${stop_loss_price:.2f}, Target=${target_price:.2f}")
+
+            # Check for suspicious Profit Rate (e.g. exactly equal to daily change?)
+            if abs(profit_rate) > 20: 
+                 logger.warning(f"⚠️ High P&L detected for {name}: {profit_rate:.2f}% (Buy: {buy_price}, Curr: {current_price})")
+            
+            # UPDATE DICT for Frontend
+            trade['current_price'] = current_price
+            trade['profit_rate'] = profit_rate
+            trade['value'] = current_price * qty
+            if market_type == 'US':
+                # Approx value in KRW for total calculation
+                trade['value_krw'] = trade['value'] * 1450 # simplified
+            else:
+                 trade['value_krw'] = trade['value']
             
             # Trailing Stop Logic
             trade.setdefault('max_price', buy_price)

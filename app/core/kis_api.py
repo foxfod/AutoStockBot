@@ -112,6 +112,7 @@ class KisApi:
             if data:
                 return {
                     'price': float(data.get('stck_prpr', 0)),
+                    'prev_close': float(data.get('stck_sdpr', 0)), # Standard Price = Prev Close
                     'volume': int(data.get('acml_vol', 0)),
                     'time': time.time(),
                     'market_type': 'KR'
@@ -127,6 +128,7 @@ class KisApi:
             if price_data:
                 return {
                     'price': float(price_data.get('last', 0)),
+                    'prev_close': float(price_data.get('base', 0)), # Base Price = Prev Close
                     'volume': 0,
                     'time': time.time(),
                     'market_type': 'US'
@@ -612,7 +614,8 @@ class KisApi:
         
         # Query all US exchanges
         exchanges = ["NASD", "NYSE", "AMEX"]  # NASD=NASDAQ, NYSE=NYSE, AMEX=AMEX
-        all_holdings = []
+        
+        unique_holdings = {} # Deduplicate by symbol (ovrs_pdno)
         summary = None
         
         for excg in exchanges:
@@ -630,16 +633,23 @@ class KisApi:
             
             if res.status_code == 200 and 'output2' in data:
                 # Merge holdings from all exchanges
-                if data['output1']:
-                    all_holdings.extend(data['output1'])
+                if data.get('output1'):
+                    for item in data['output1']:
+                        symbol = item.get('ovrs_pdno')
+                        if symbol and symbol not in unique_holdings:
+                            unique_holdings[symbol] = item
                 
-                # Use summary from first successful response
-                if summary is None:
+                # Use summary from first successful response (assuming summary matches overall account?)
+                # Actually summary might differ per exchange query? 
+                # Usually summary represents the Total Account status in KIS.
+                if summary is None and data.get('output2'):
                     summary = data['output2']
                     
-                logger.debug(f"📡 {excg}: Found {len(data['output1'])} holdings")
+                logger.debug(f"📡 {excg}: Found {len(data.get('output1', []))} holdings")
             else:
                 logger.warning(f"⚠️ Failed to query {excg}: {data.get('msg1', 'Unknown error')}")
+        
+        all_holdings = list(unique_holdings.values())
         
         if summary:
             logger.info(f"✅ Total US holdings across all exchanges: {len(all_holdings)}")

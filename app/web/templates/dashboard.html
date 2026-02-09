@@ -130,7 +130,9 @@
             <!-- Slot Management Cards -->
             <div class="grid grid-cols-2 gap-4">
                 <!-- KR Slots -->
-                <div class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-sm">
+                <!-- KR Slots -->
+                <div id="kr-slot-box" onclick="filterTrades('KR')"
+                    class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-sm transition hover:border-gray-600 cursor-pointer">
                     <div class="flex justify-between items-center mb-2">
                         <div class="flex items-center gap-2">
                             <span
@@ -151,7 +153,9 @@
                 </div>
 
                 <!-- US Slots -->
-                <div class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-sm">
+                <!-- US Slots -->
+                <div id="us-slot-box" onclick="filterTrades('US')"
+                    class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-sm transition hover:border-gray-600 cursor-pointer">
                     <div class="flex justify-between items-center mb-2">
                         <div class="flex items-center gap-2">
                             <span
@@ -175,14 +179,16 @@
             <!-- Active Positions Grid -->
             <div class="flex-1 flex flex-col min-h-0">
                 <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
-                    보유 종목 현황
-                    <span id="active-count"
-                        class="bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">0</span>
-                </h2>
-                <div id="active-trades-grid" class="flex-1 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto pr-1">
-                    <!-- Cards -->
-                    <div class="col-span-full text-center text-gray-600 py-10 text-sm">보유 중인 종목이 없습니다</div>
-                </div>
+                    <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                        <span id="grid-title">보유 종목 현황</span>
+                        <span id="active-count"
+                            class="bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">0</span>
+                    </h2>
+                    <div id="active-trades-grid"
+                        class="flex-1 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto pr-1">
+                        <!-- Cards -->
+                        <div class="col-span-full text-center text-gray-600 py-10 text-sm">보유 중인 종목이 없습니다</div>
+                    </div>
             </div>
 
         </div>
@@ -302,147 +308,26 @@
         let currentTrades = {};
         let currentSymbol = null; // For Modal
         let manualSlots = {}; // {KR: 3, US: 2}
+        let currentFilter = 'ALL'; // 'ALL', 'KR', 'US'
 
-        // --- Elements ---
-        const logContainer = document.getElementById('log-container');
-        const modal = document.getElementById('trade-modal');
-        const marquee = document.getElementById('market-marquee');
-
-        // --- Utils ---
-        const fmt = (n, d = 2) => n?.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }) || '0';
-        const fmtKrw = (n) => Math.round(n || 0).toLocaleString();
-
-        // --- WebSocket ---
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
-            const ws = new WebSocket(wsUrl);
-            const statusEl = document.getElementById('connection-status');
-            const overlay = document.getElementById('connection-lost');
-
-            ws.onopen = () => {
-                statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span><span class="text-green-400">Connected</span>';
-                overlay.classList.add('hidden');
-                addLog({ data: { timestamp: new Date().toLocaleTimeString(), level: 'SYSTEM', message: 'Connected to Live Stream' } });
-            };
-            ws.onmessage = (e) => {
-                const payload = JSON.parse(e.data);
-                if (payload.type === 'log') addLog(payload);
-            };
-            ws.onclose = () => {
-                statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span><span>연결 끊김</span>';
-                setTimeout(connectWebSocket, 3000);
-            };
-        }
-
-        function addLog(payload) {
-            const data = payload.data;
-            const div = document.createElement('div');
-            let color = 'text-gray-300';
-            if (data.level === 'ERROR') color = 'text-red-400 font-bold';
-            if (data.level === 'WARNING') color = 'text-yellow-400';
-            if (data.level === 'INFO') color = 'text-blue-300';
-            if (data.level === 'SYSTEM') color = 'text-purple-400';
-
-            div.className = `break-words ${color} mb-1`;
-            div.innerHTML = `<span class="text-[10px] opacity-40 mr-1">[${data.timestamp}]</span>${data.message}`;
-            logContainer.appendChild(div);
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
-        function clearLogs() { logContainer.innerHTML = ''; }
-
-        // --- API & State ---
-        async function fetchState() {
-            try {
-                const res = await fetch('/api/state');
-                if (!res.ok) throw new Error("API Error");
-                const data = await res.json();
-
-                if (data.status === 'loading') return;
-
-                // 1. Top Bar
-                document.getElementById('server-time').innerText = data.server_time.split(' ')[1];
-                document.getElementById('bot-mode').innerText = data.is_paused ? "일시정지" : "가동 중 🚀";
-                document.getElementById('bot-mode').className = data.is_paused ? "font-bold text-sm text-yellow-500 animate-pulse" : "font-bold text-sm text-green-400";
-
-                const btnPause = document.getElementById('btn-pause');
-                btnPause.innerText = data.is_paused ? "▶ 구동 재개" : "⏸ 일시정지";
-                btnPause.className = `px-4 py-2 rounded text-sm font-bold shadow transition ${data.is_paused ? 'bg-green-600 hover:bg-green-500' : 'bg-yellow-600 hover:bg-yellow-500'}`;
-
-                // 2. Market Info
-                if (data.market_info) renderMarketInfo(data.market_info);
-
-                // 3. Slot Info
-                manualSlots = data.manual_slots || { KR: 3, US: 3 }; // Sync manual slots
-                document.getElementById('kr-budget').innerText = `₩${fmtKrw(data.kr_budget)}`;
-                document.getElementById('us-budget').innerText = `$${fmt(data.us_budget)}`;
-
-                renderSlotBoxes('KR', manualSlots.KR || 3, Object.values(data.active_trades).filter(t => t.market_type !== 'US'));
-                renderSlotBoxes('US', manualSlots.US || 3, Object.values(data.active_trades).filter(t => t.market_type === 'US'));
-
-                // 4. Active Trades
-                currentTrades = data.active_trades || {};
-                renderTrades(currentTrades);
-                document.getElementById('active-count').innerText = Object.keys(currentTrades).length;
-
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        function renderMarketInfo(info) {
-            if (!info || Object.keys(info).length === 0) return;
-
-            // Map keys
-            const map = [
-                { k: 'kospi', l: 'KOSPI' }, { k: 'kosdaq', l: 'KOSDAQ' }, { k: 'nasdaq', l: 'NASDAQ' },
-                { k: 'sp500', l: 'S&P500' }, { k: 'gold', l: 'GOLD' }, { k: 'oil', l: 'OIL' },
-                { k: 'usd_krw', l: 'USD/KRW' },
-            ];
-
-            let html = '';
-            map.forEach(item => {
-                const d = info[item.k];
-                if (d) {
-                    const color = d.change > 0 ? 'text-red-400' : (d.change < 0 ? 'text-blue-400' : 'text-gray-400');
-                    const sign = d.change > 0 ? '▲' : (d.change < 0 ? '▼' : '-');
-                    html += `
-                        <div class="flex items-center gap-2">
-                            <span class="font-bold text-white">${item.l}</span>
-                            <span class="${color}">${fmt(d.price)}</span>
-                            <span class="text-xs ${color}">${sign} ${Math.abs(d.rate).toFixed(2)}%</span>
-                        </div>
-                    `;
-                }
-            });
-            marquee.innerHTML = html;
-        }
-
-        function renderSlotBoxes(market, maxSlots, activeTrades) {
-            const container = document.getElementById(`${market.toLowerCase()}-slots-container`);
-            const filledCount = activeTrades.length;
-            let html = '';
-
-            for (let i = 0; i < maxSlots; i++) {
-                if (i < filledCount) {
-                    // Filled Slot
-                    const trade = activeTrades[i];
-                    const pnlColor = trade.profit_rate > 0 ? 'bg-red-500' : 'bg-blue-500';
-                    html += `<div class="flex-1 rounded ${pnlColor} bg-opacity-80 border border-white/20 shadow-inner min-w-[10px]" title="${trade.name}"></div>`;
-                } else {
-                    // Empty Slot
-                    html += `<div class="flex-1 rounded bg-gray-700/30 border border-dashed border-gray-600 flex items-center justify-center text-[10px] text-gray-500 min-w-[10px]">빈 슬롯</div>`;
-                }
-            }
-            container.innerHTML = html;
-        }
+        // ... existing code ...
 
         function renderTrades(trades) {
             const container = document.getElementById('active-trades-grid');
-            const list = Object.entries(trades);
+            let list = Object.entries(trades);
+
+            // Filter
+            if (currentFilter !== 'ALL') {
+                list = list.filter(([_, t]) => {
+                    const mType = t.market_type || 'KR';
+                    return mType === currentFilter;
+                });
+            }
 
             if (list.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center text-gray-600 py-10 text-sm">보유 중인 종목이 없습니다</div>`;
+                container.innerHTML = `<div class="col-span-full text-center text-gray-600 py-10 text-sm">
+                    ${currentFilter === 'ALL' ? '보유 중인 종목이 없습니다' : currentFilter + ' 종목이 없습니다'}
+                </div>`;
                 return;
             }
 
@@ -467,7 +352,10 @@
                                 </div>
                             </div>
                             <div class="text-right">
-                                <div class="font-bold text-lg ${pnlClass}">${t.profit_rate.toFixed(2)}%</div>
+                                <div class="font-bold text-lg ${pnlClass}" title="Total P&L">${t.profit_rate.toFixed(2)}%</div>
+                                <div class="text-[10px] ${t.daily_change > 0 ? 'text-red-400' : 'text-blue-400'} mb-0.5" title="Daily Change">
+                                    (${t.daily_change > 0 ? '+' : ''}${t.daily_change ? t.daily_change.toFixed(2) : '0.00'}%)
+                                </div>
                                 <div class="text-xs text-gray-300">
                                     ${isUS ? '$' : ''}${fmt(t.current_price)}
                                 </div>
@@ -477,6 +365,21 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function filterTrades(market) {
+            currentFilter = market;
+
+            // Update UI Highlights
+            document.getElementById('kr-slot-box').className = `bg-gray-800 rounded-lg p-3 border shadow-sm cursor-pointer transition ${market === 'KR' ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-700 hover:border-gray-600'}`;
+            document.getElementById('us-slot-box').className = `bg-gray-800 rounded-lg p-3 border shadow-sm cursor-pointer transition ${market === 'US' ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-700 hover:border-gray-600'}`;
+
+            // Re-render
+            renderTrades(currentTrades);
+
+            // Update Title
+            const titleMap = { 'ALL': '보유 종목 현황', 'KR': '보유 종목 현황 (한국)', 'US': '보유 종목 현황 (미국)' };
+            document.getElementById('grid-title').innerText = titleMap[market];
         }
 
         // --- Actions ---
