@@ -336,6 +336,9 @@ async def get_state(user=Depends(login_required)):
                     enriched_trades[symbol] = trade
         
         return {
+            "status": "ok",
+            "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "version": server_context.get("version", "Unknown"),
             "bot_state": server_context["bot_state"],
             "is_paused": server_context.get("is_paused", False),
             "kr_budget": safe_float(kr_budget),

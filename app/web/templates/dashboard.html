@@ -86,6 +86,8 @@
                 <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                 <span>연결 끊김</span>
             </div>
+            <span id="server-version"
+                class="text-gray-600 text-[10px] font-mono border border-gray-700 px-1 rounded">v-</span>
             <span id="server-time" class="text-gray-400 text-xs font-mono">--:--:--</span>
         </div>
     </header>
@@ -310,7 +312,52 @@
         let manualSlots = {}; // {KR: 3, US: 2}
         let currentFilter = 'ALL'; // 'ALL', 'KR', 'US'
 
-        // ... existing code ...
+        // Helper Functions
+        const fmt = (n) => n ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+        const fmtKrw = (n) => n ? n.toLocaleString('ko-KR') : '0';
+
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                const data = await res.json();
+                if (data.status === 'loading') return;
+
+                // 1. Top Bar
+                document.getElementById('server-time').innerText = data.server_time.split(' ')[1];
+                if (data.version) document.getElementById('server-version').innerText = `v${data.version}`;
+
+                // 2. Budget
+                if (data.kr_budget !== undefined) document.getElementById('kr-budget').innerText = `₩${fmtKrw(data.kr_budget)}`;
+                if (data.us_budget !== undefined) document.getElementById('us-budget').innerText = `$${fmt(data.us_budget)}`;
+
+                // 3. Active Trades
+                currentTrades = data.active_trades || {};
+                renderTrades(currentTrades);
+                document.getElementById('active-count').innerText = Object.keys(currentTrades).length;
+
+            } catch (e) {
+                console.error("State fetch error", e);
+            }
+        }
+
+        function filterTrades(filter) {
+            currentFilter = filter;
+            renderTrades(currentTrades);
+
+            // Visual Feedback
+            const krBox = document.getElementById('kr-slot-box');
+            const usBox = document.getElementById('us-slot-box');
+
+            // Reset
+            krBox.classList.remove('ring-2', 'ring-blue-500');
+            usBox.classList.remove('ring-2', 'ring-blue-500');
+
+            if (filter === 'KR') {
+                krBox.classList.add('ring-2', 'ring-blue-500');
+            } else if (filter === 'US') {
+                usBox.classList.add('ring-2', 'ring-blue-500');
+            }
+        }
 
         function renderTrades(trades) {
             const container = document.getElementById('active-trades-grid');
@@ -640,10 +687,16 @@
         // Init
         const inputTarget = document.getElementById('input-target');
         const inputStop = document.getElementById('input-stop');
+        const logContainer = document.getElementById('log-container');
 
         // Connect
         connectWebSocket();
         setInterval(fetchState, 2000);
+
+        // Initial Fetch
+        fetchState();
+
+        const modal = document.getElementById('trade-modal');
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
         });

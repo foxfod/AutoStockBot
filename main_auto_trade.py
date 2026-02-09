@@ -62,6 +62,7 @@ US_CLOSE = dtime(6, 0)
 
 SCAN_INTERVAL = 10 # 10 Minutes
 MAX_TRADES = 3
+VERSION = "20260209_010-06"
 
 state = {
     "kr_liquidation_done": False,
@@ -76,6 +77,7 @@ state = {
 server_context["log_queue"] = log_queue
 server_context["bot_state"] = state
 server_context["trade_manager"] = trade_manager
+server_context["version"] = VERSION
 
 def is_time_in_range(start, end, current):
     """Check if current time is between start and end (handles midnight wrap)"""
@@ -106,8 +108,8 @@ def check_market_open(market_type="KR"):
 
 async def trading_loop():
     """Original Main Loop extracted to a function"""
-    bot.send_message("🤖 Global Auto Trading System Started (KR + US)")
-    logger.info("System Started - Trading Loop Active")
+    bot.send_message(f"🤖 Global Auto Trading System Started (Ver: {VERSION})")
+    logger.info(f"System Started - Trading Loop Active (Ver: {VERSION})")
     
     # Initialize WebSocket
     logger.info("Initializing WebSocket connection...")
