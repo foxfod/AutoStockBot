@@ -78,13 +78,21 @@
             <span class="text-2xl">🤖</span>
             <h1 class="text-lg font-bold text-white tracking-wide">Scalping Bot <span class="text-blue-400">Pro</span>
             </h1>
+            <button onclick="openTopPicksModal()"
+                class="ml-4 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded text-xs font-bold text-white shadow transition flex items-center gap-1">
+                🏆 Top 10
+            </button>
         </div>
 
         <!-- Connection Status -->
         <div class="flex items-center space-x-4">
-            <div id="connection-status" class="flex items-center space-x-2 text-xs text-red-400 font-mono">
-                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                <span>연결 끊김</span>
+            <div class="flex items-center gap-2">
+                <div id="connection-status" class="flex items-center space-x-2 text-xs text-red-400 font-mono">
+                    <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span>연결 끊김</span>
+                </div>
+                <button onclick="connectWebSocket()" class="text-xs text-gray-500 hover:text-white transition"
+                    title="Reconnect WebSocket">🔄</button>
             </div>
             <span id="server-version"
                 class="text-gray-600 text-[10px] font-mono border border-gray-700 px-1 rounded">v-</span>
@@ -290,6 +298,38 @@
                     class="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-bold text-white transition flex items-center justify-center gap-2">
                     🚨 전량 매도 (시장가)
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top 10 Modal -->
+    <div id="top-picks-modal"
+        class="modal modal-hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div
+            class="modal-body bg-gray-800 w-full max-w-2xl rounded-xl border border-gray-700 shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="bg-gray-900 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <h3 class="text-lg font-bold text-white">🏆 오늘의 Top 10</h3>
+                    <span id="top-picks-date"
+                        class="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded border border-gray-700">DATE</span>
+                </div>
+                <button onclick="closeTopPicksModal()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+            <div id="top-picks-list" class="flex-1 overflow-y-auto p-4 space-y-2">
+                <!-- Content -->
+                <div class="text-center text-gray-500 py-10">데이터를 불러오는 중...</div>
+            </div>
+            <div class="bg-gray-900 px-4 py-3 border-t border-gray-700 flex justify-end gap-2">
+                <button onclick="refreshTopPicks('KR')"
+                    class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white transition flex items-center gap-1">
+                    🔄 KR 갱신
+                </button>
+                <button onclick="refreshTopPicks('US')"
+                    class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white transition flex items-center gap-1">
+                    🔄 US 갱신
+                </button>
+                <button onclick="closeTopPicksModal()"
+                    class="px-4 py-1.5 bg-gray-600 hover:bg-gray-500 rounded text-xs font-bold text-white transition">닫기</button>
             </div>
         </div>
     </div>
@@ -699,6 +739,78 @@
         const modal = document.getElementById('trade-modal');
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
+        });
+
+        // --- Top 10 Modal ---
+        const topPicksModal = document.getElementById('top-picks-modal');
+
+        async function openTopPicksModal() {
+            topPicksModal.classList.remove('modal-hidden');
+            await loadTopPicks();
+        }
+
+        function closeTopPicksModal() {
+            topPicksModal.classList.add('modal-hidden');
+        }
+
+        async function loadTopPicks() {
+            const listContainer = document.getElementById('top-picks-list');
+            try {
+                const res = await fetch('/api/top-picks');
+                const data = await res.json();
+
+                if (!data.picks || data.picks.length === 0) {
+                    listContainer.innerHTML = '<div class="text-center text-gray-500 py-10">아직 선정된 Top 10 종목이 없습니다.<br>갱신 버튼을 눌러 분석을 시작하세요.</div>';
+                    document.getElementById('top-picks-date').innerText = new Date().toLocaleDateString();
+                    return;
+                }
+
+                document.getElementById('top-picks-date').innerText = `${data.date} (${data.market})`;
+
+                listContainer.innerHTML = data.picks.map((p, i) => `
+                    <div class="bg-gray-700/50 p-3 rounded border border-gray-700 flex flex-col gap-2">
+                        <div class="flex justify-between items-start">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-blue-600 text-white text-[10px] font-bold px-1.5 rounded">${i + 1}</span>
+                                <span class="font-bold text-white">${p.name}</span>
+                                <span class="text-xs text-gray-400">(${p.symbol})</span>
+                            </div>
+                            <span class="text-yellow-400 font-bold text-sm">${p.score}점</span>
+                        </div>
+                        <div class="text-xs text-gray-300 bg-gray-900/50 p-2 rounded">
+                            ${p.reason}
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (e) {
+                console.error(e);
+                listContainer.innerHTML = '<div class="text-center text-red-500 py-10">데이터 로드 실패</div>';
+            }
+        }
+
+        async function refreshTopPicks(market) {
+            if (!confirm(`${market} 시장 분석을 시작하시겠습니까?\n(약 1~2분 소요될 수 있습니다)`)) return;
+
+            const listContainer = document.getElementById('top-picks-list');
+            listContainer.innerHTML = '<div class="text-center text-gray-400 py-10 flex flex-col items-center gap-2"><span class="text-2xl animate-spin">⏳</span><span>AI가 심층 분석 중입니다...</span></div>';
+
+            try {
+                const res = await fetch('/api/top-picks/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ market })
+                });
+                const data = await res.json();
+                await loadTopPicks(); // Reload logic handles display
+            } catch (e) {
+                console.error(e);
+                listContainer.innerHTML = '<div class="text-center text-red-500 py-10">분석 요청 실패</div>';
+            }
+        }
+
+        topPicksModal.addEventListener('click', (e) => {
+            if (e.target === topPicksModal) closeTopPicksModal();
         });
 
     </script>

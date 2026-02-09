@@ -12,6 +12,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
 from app.core.market_data import market_data_manager
+from app.core.selector import selector
 
 app = FastAPI(title="Scalping Bot Dashboard")
 
@@ -196,24 +197,107 @@ async def analyze_trade(symbol: str, user=Depends(login_required)):
             # Check kis_api.py... get_overseas_news_titles exists!
             news = kis.get_overseas_news_titles(symbol)
             news_list = [n['title'] for n in news[:3]] if news else []
-        else:
             news = kis.get_news_titles(symbol)
-            news_list = [n['hts_pbnt_titl_cntt'] for n in news[:3]] if news else []
         
-        # Run AI Analysis
-        report = ai_analyzer.analyze_holding_stock(symbol, trade['name'], tech_summary, news_list)
+        # 4. Construct Report
+        # Basic Info
+        report = f"### 🔍 {symbol} ({market_type})\n"
+        report += f"- 내 맘대로 분석 결과\n\n"
         
-        # Prepend Timestamp
-        from datetime import datetime
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        final_report = f"**[분석 일시: {now_str}]**\n\n{report}"
+        # Technicals
+        report += "#### 📈 기술적 지표\n"
+        report += f"- 분석: {tech_summary}\n\n"
         
-        return {"result": final_report}
+        # News
+        report += "#### 📰 관련 뉴스\n"
+        if news_list:
+            for n in news_list:
+                report += f"- {n}\n"
+        else:
+            report += "- 관련 뉴스 없음\n"
+        report += "\n"
+        
+        # AI Analysis
+        report += "#### 🤖 AI 종합 의견\n"
+        
+        # We need a proper stock object for AI analyzer
+        # Dummy stock object with enough info
+        stock_obj = {
+            "symbol": symbol,
+            "name": symbol, # Name might not be readily available in trade object if just symbol passed? 
+                            # TradeManager has names. Let's try to get it from trade object if possible.
+                            # But here we are just passing symbol. `analyze_stock` needs distinct obj.
+            "market": market_type
+        }
+        
+        # Call AI Analyzer
+        reason, score = await ai_analyzer.analyze_stock(stock_obj, daily_candles, news, tech_summary, market_type)
+        
+        report += f"- **점수**: {score}점\n"
+        report += f"- **판단**: {reason}\n"
+        
+        return {"result": report}
         
     except Exception as e:
         import traceback
-        logging.error(f"Analysis Failed: {traceback.format_exc()}")
-        return {"result": f"분석 중 오류 발생: {str(e)}"}
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Top 10 Picks API ---
+class TopPicksRequest(BaseModel):
+    market: str = "KR"
+
+@app.get("/api/top-picks")
+async def get_top_picks(market: str = "KR", user=Depends(login_required)):
+    """
+    Get the persisted Top 10 picks.
+    Optionally filter by market (check if the file matches the requested market).
+    """
+    try:
+        file_path = "app/data/top_picks.json"
+        if not os.path.exists(file_path):
+            return {}
+            
+        with open(file_path, "r", encoding='utf-8') as f:
+            data = json.load(f)
+            
+        # Check market match?
+        # The user might want to see whatever is there, but strictly speaking 
+        # if they ask for KR and we have US data, it's misleading.
+        # Let's return what's in the file, but maybe frontend checks the 'market' field.
+        # Actually, let's just return the file content and let frontend decide.
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error reading top picks: {e}")
+        return {}
+
+@app.post("/api/top-picks/refresh")
+async def refresh_top_picks(req: TopPicksRequest, user=Depends(login_required)):
+    """
+    Trigger a fresh analysis for Top 10.
+    """
+    try:
+        # Prevent concurrent runs? selector.select_pre_market_picks might handle it or we assume user is careful.
+        # It takes time, so we should probably run it and return, or wait?
+        # User wants to see the result, so we await.
+        
+        picks = await selector.select_pre_market_picks(req.market)
+        
+        # Read the file again to return full structure or just return picks
+        # select_pre_market_picks returns the list of dicts.
+        
+        # We construct the response to match file format
+        return {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "market": req.market,
+            "picks": picks
+        }
+    except Exception as e:
+        logging.error(f"Error refreshing top picks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.get("/api/state")
 async def get_state(user=Depends(login_required)):
