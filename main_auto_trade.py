@@ -62,7 +62,7 @@ US_CLOSE = dtime(6, 0)
 
 SCAN_INTERVAL = 10 # 10 Minutes
 MAX_TRADES = 3
-VERSION = "20260210_010-19"
+VERSION = "20260210_010-20"
 
 state = {
     "kr_liquidation_done": False,

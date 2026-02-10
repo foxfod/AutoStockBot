@@ -1,15 +1,16 @@
 import google.generativeai as genai
-from openai import OpenAI
+from openai import AsyncOpenAI
 import json
 from app.core.config import settings
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 class AIAnalyzer:
     def __init__(self):
-        # Initialize OpenAI (Fallback)
-        self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        # Initialize OpenAI (Fallback) - Async Client
+        self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.gpt_model = settings.GPT_MODEL
         
         # Initialize Gemini (Primary)
@@ -21,15 +22,15 @@ class AIAnalyzer:
             self.gemini_model = None
             logger.warning("Gemini API Key not found. Using GPT only.")
 
-    def analyze_stock(self, stock_name: str, news_list: list[str], tech_summary: dict) -> dict:
+    async def analyze_stock(self, stock_name: str, news_list: list[str], tech_summary: dict) -> dict:
         """
-        Analyze stock using GPT (Primary) -> Gemini (Fallback).
+        Analyze stock using GPT (Primary) -> Gemini (Fallback) [Async].
         """
         prompt = self._create_prompt(stock_name, news_list, tech_summary)
         
         # 1. Try GPT (Primary)
         try:
-            return self._analyze_with_gpt(prompt)
+            return await self._analyze_with_gpt(prompt)
         except Exception as e:
             logger.error(f"GPT Analysis Failed: {e}. Switching to Gemini...")
             
@@ -37,7 +38,8 @@ class AIAnalyzer:
         if self.gemini_model:
             try:
                 logger.info(f"Analyzing {stock_name} with Gemini (Fallback)...")
-                response = self.gemini_model.generate_content(
+                # Gemini Async Call
+                response = await self.gemini_model.generate_content_async(
                     prompt,
                     generation_config={"response_mime_type": "application/json"}
                 )
@@ -47,9 +49,9 @@ class AIAnalyzer:
         
         return {"score": 50, "reason": "AI Analysis Failed (Both Models)", "action": "Pass", "strategy": {}}
 
-    def _analyze_with_gpt(self, prompt: str) -> dict:
+    async def _analyze_with_gpt(self, prompt: str) -> dict:
         logger.info(f"Analyzing with GPT ({self.gpt_model})...")
-        response = self.openai_client.chat.completions.create(
+        response = await self.openai_client.chat.completions.create(
             model=self.gpt_model,
             messages=[
                 {"role": "system", "content": "You are a professional stock trader analyzing news for scalping opportunities."},
@@ -98,10 +100,9 @@ class AIAnalyzer:
         }}
         """
 
-    
-    def analyze_risk(self, symbol: str, current_price: float, buy_price: float, tech_summary: dict, news_titles: list) -> dict:
+    async def analyze_risk(self, symbol: str, current_price: float, buy_price: float, tech_summary: dict, news_titles: list) -> dict:
         """
-        Analyze whether to HOLD or SELL a losing position.
+        Analyze whether to HOLD or SELL a losing position [Async].
         """
         pnl = ((current_price - buy_price) / buy_price) * 100
         news_text = json.dumps(news_titles, ensure_ascii=False) if news_titles else "No recent breaking news."
@@ -136,7 +137,7 @@ class AIAnalyzer:
         
         # 1. GPT
         try:
-            res = self.openai_client.chat.completions.create(
+            res = await self.openai_client.chat.completions.create(
                 model=self.gpt_model,
                 messages=[{"role": "system", "content": "Risk Manager Mode."}, {"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
@@ -148,25 +149,21 @@ class AIAnalyzer:
         # 2. Gemini
         if self.gemini_model:
             try:
-                res = self.gemini_model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+                res = await self.gemini_model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
                 return json.loads(res.text)
             except Exception as e:
                 logger.error(f"Gemini Risk Analysis Failed: {e}")
                 
         return {"decision": "HOLD", "reason": "AI Error (Default Hold)"}
             
-    def analyze_stocks_batch(self, jobs: list) -> dict:
+    async def analyze_stocks_batch(self, jobs: list) -> dict:
         """
-        Analyze multiple stocks in one request to save API calls/Cost.
-        Primary: GPT-5-nano
-        Fallback: Gemini
-        Returns: { symbol: {score, reason, action, strategy} }
+        Analyze multiple stocks in one request to save API calls/Cost [Async].
         """
         if not jobs:
             return {}
             
         # Construct Batch Prompt
-        # Extract Market Context from the first job (Batch shares same market context)
         market_context = jobs[0].get('market_status', 'Neutral Market')
         
         prompt = f"Current Market Environment: {market_context}\n\n"
@@ -200,7 +197,7 @@ class AIAnalyzer:
         
         try:
             logger.info(f"Batch Analyzing {len(jobs)} stocks with GPT ({self.gpt_model})...")
-            res = self.openai_client.chat.completions.create(
+            res = await self.openai_client.chat.completions.create(
                 model=self.gpt_model,
                 messages=[
                     {"role": "system", "content": "You are a professional stock trader."},
@@ -217,7 +214,7 @@ class AIAnalyzer:
             if self.gemini_model:
                 try:
                     logger.info(f"Batch Analyzing {len(jobs)} stocks with Gemini...")
-                    res = self.gemini_model.generate_content(
+                    res = await self.gemini_model.generate_content_async(
                         prompt, 
                         generation_config={"response_mime_type": "application/json"}
                     )
@@ -259,10 +256,9 @@ class AIAnalyzer:
             logger.error(f"Batch Analysis Parsing Failed ({used_model}): {e}")
             return {}
 
-    def analyze_holding_stock(self, symbol: str, stock_name: str, tech_summary: dict, news_list: list) -> str:
+    async def analyze_holding_stock(self, symbol: str, stock_name: str, tech_summary: dict, news_list: list) -> str:
         """
-        Generate a detailed analysis report for a held stock.
-        Returns markdown text directly.
+        Generate a detailed analysis report for a held stock [Async].
         """
         news_text = json.dumps(news_list, ensure_ascii=False) if news_list else "최근 주요 뉴스 없음."
         
@@ -294,7 +290,7 @@ class AIAnalyzer:
         # 1. GPT
         try:
             logger.info(f"Generating Analysis Report for {stock_name} with GPT...")
-            res = self.openai_client.chat.completions.create(
+            res = await self.openai_client.chat.completions.create(
                 model=self.gpt_model,
                 messages=[
                     {"role": "system", "content": "You are a helpful financial analyst."},
@@ -308,7 +304,7 @@ class AIAnalyzer:
         # 2. Gemini
         if self.gemini_model:
             try:
-                res = self.gemini_model.generate_content(prompt)
+                res = await self.gemini_model.generate_content_async(prompt)
                 return res.text
             except Exception as e:
                 logger.error(f"Gemini Report Gen Failed: {e}")
