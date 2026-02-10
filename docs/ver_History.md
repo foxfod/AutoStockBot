@@ -95,3 +95,10 @@
 - **수정**: 
     - `dashboard.html`: 웹소켓 변수 전역 관리 및 중복 연결 방지 로직 추가.
     - 재연결 버튼에 **로딩 인디케이터(Spinner)** 추가하여 사용자 경험 개선.
+
+### [v.20260210_010-20] Top 10 분석 로직 비동기 전환 (Async Top 10 Analysis)
+- **문제**: Top 10 분석 시(약 1~2분 소요) **서버 응답이 멈춰** 대시보드에서 "데이터 로드 실패" 에러 발생.
+- **수정**:
+    - `ai_analyzer.py`: OpenAI/Gemini 호출을 **비동기(Async)** 방식으로 변경하여 Non-blocking I/O 구현.
+    - `selector.py`: 종목 분석 루프를 `asyncio.gather`를 사용한 **병렬 처리(Parallel Processing)**로 전환.
+    - **결과**: 분석 속도가 획기적으로 개선되고, 분석 중에도 서버가 멈추지 않음.
