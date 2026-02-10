@@ -298,7 +298,7 @@ class KisApi:
             "ACNT_PRDT_CD": "01",
             "AFHR_FLPR_YN": "N",
             "OFL_YN": "N",
-            "INQR_DVSN": "02",
+            "INQR_DVSN": "01", # Changed from "02" to "01" (KIS API Update)
             "UNPR_DVSN": "01",
             "FUND_STTL_ICLD_YN": "N",
             "FNCG_AMT_AUTO_RDPT_YN": "N",
@@ -329,7 +329,7 @@ class KisApi:
             "ACNT_PRDT_CD": "01",
             "AFHR_FLPR_YN": "N",
             "OFL_YN": "N",
-            "INQR_DVSN": "02",
+            "INQR_DVSN": "01", # Changed from "02" to "01" (KIS API Update)
             "UNPR_DVSN": "01",
             "FUND_STTL_ICLD_YN": "N",
             "FNCG_AMT_AUTO_RDPT_YN": "N",
