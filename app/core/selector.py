@@ -107,7 +107,9 @@ class Selector:
             tech = technical.analyze(daily_data)
             
             # Assess via AI
-            analysis_result = await ai_analyzer.analyze_stock(stock, daily_data, news, tech, market_type)
+            # Assess via AI
+            # Fix: analyze_stock is sync and takes (stock_name, news_list, tech)
+            analysis_result = ai_analyzer.analyze_stock(name, news, tech)
             score = analysis_result.get('score', 0)
             reason = analysis_result.get('reason', 'Analysis Failed')
             
