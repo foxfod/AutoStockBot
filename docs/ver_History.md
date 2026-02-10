@@ -77,3 +77,11 @@
 - **수정**: 
     - `trade_manager.py`: `sync_portfolio` 메서드에 API 응답 예외 처리 추가 (None 반환 시 빈 리스트로 처리).
     - `run.bat`: 실행 대상을 `app.main`에서 `main_auto_trade.py`로 변경하여 트레이딩 루프 정상 구동.
+
+### [v.20260210_010-17] 미국장 청산 및 잔고 조회 오류 수정 (US Liquidation & Balance Fix)
+- **문제**: 
+    - 미국 주식 매도 시 '시장가(Price=0)' 주문 불가로 인한 "주문단가를 입력 하십시오" 오류.
+    - 한국투자증권 API 정책 변경으로 잔고 조회 시 `OPSQ2001` (INVALID_CHECK_INQR_DVSN) 오류 발생.
+- **수정**:
+    - `trade_manager.py`: 미국 청산 시 **현재가 대비 -5% 지정가** 주문으로 변경하여 즉시 체결 유도.
+    - `kis_api.py`: 잔고 조회 파라미터 `INQR_DVSN` 값을 `02`에서 **`01`**로 변경.
