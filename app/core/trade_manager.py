@@ -905,22 +905,36 @@ class TradeManager:
                         symbol = stock['ovrs_pdno']
                         excg = stock['ovrs_excg_cd']
                         name = stock['ovrs_item_name']
-                        # Sell with Market Price (Price=0) for immediate execution
-                        # User requested strict Market Order to ensure liquidation at session end.
-                        # API Doc: Input "0" for Market Price.
-                        # Sell with Market Price (Price=0) for immediate execution
-                        res = kis.sell_overseas_order(symbol, qty, price=0, excg_cd=excg)
+                        # Sell with Limit Price (Current Price * 0.95) for immediate execution
+                        # reason: US Market Order (01) is not supported in KIS API for Sell (TTTT1006U).
+                        # We must use Limit Order (00). To ensure fill, we set price lower than current.
+                        
+                        current_price_data = kis.get_overseas_price(symbol, excg)
+                        limit_price = 0
+                        
+                        if current_price_data and 'last' in current_price_data:
+                            curr_price = float(current_price_data['last'])
+                            limit_price = curr_price * 0.95 # 5% lower for immediate fill
+                            logger.info(f"🇺🇸 Liquidation: {name} Current ${curr_price} -> Limit ${limit_price:.2f}")
+                        else:
+                            # Fallback if price fetch fails? Try to use avg price from balance or skip?
+                            # If we can't get price, we can't place valid limit order.
+                            logger.error(f"❌ Failed to get price for {name}. Cannot liquidate without price.")
+                            bot.send_message(f"❌ 미장 청산 실패 ({name}): 실시간 시세 조회 불가")
+                            continue
+
+                        res = kis.sell_overseas_order(symbol, qty, price=limit_price, excg_cd=excg)
                         
                         if isinstance(res, dict) and "error" in res:
                              logger.warn(f"US Liquidation failed for {name}: {res['error']}. Retrying...")
                              time.sleep(1)
-                             res = kis.sell_overseas_order(symbol, qty, price=0, excg_cd=excg)
+                             res = kis.sell_overseas_order(symbol, qty, price=limit_price, excg_cd=excg)
 
                         if isinstance(res, dict) and "error" in res:
                              bot.send_message(f"❌ 미장 청산 실패 ({name}): {res['error']}")
                              logger.error(f"Final US Liquidation failed for {name}: {res['error']}")
                         else:
-                             bot.send_message(f"⏹️ 미장 청산 완료 (시장가): {name}")
+                             bot.send_message(f"⏹️ 미장 청산 완료 (지정가 ${limit_price:.2f}): {name}")
 
         keys_to_remove = [k for k, v in self.active_trades.items() 
                           if (market_filter == "ALL") or (v.get('market_type') == market_filter)]
