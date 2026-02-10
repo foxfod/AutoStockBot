@@ -107,7 +107,9 @@ class Selector:
             tech = technical.analyze(daily_data)
             
             # Assess via AI
-            reason, score = await ai_analyzer.analyze_stock(stock, daily_data, news, tech, market_type)
+            analysis_result = await ai_analyzer.analyze_stock(stock, daily_data, news, tech, market_type)
+            score = analysis_result.get('score', 0)
+            reason = analysis_result.get('reason', 'Analysis Failed')
             
             if score >= 70:
                 stock['reason'] = reason

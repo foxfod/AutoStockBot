@@ -90,13 +90,14 @@ class KisApi:
             logger.error(f"Error getting token: {str(e)}")
             raise
 
-    def get_realtime_price(self, symbol: str, market_type: str = "KR") -> Optional[Dict]:
+    def get_realtime_price(self, symbol: str, market_type: str = "KR", excg_cd: str = None) -> Optional[Dict]:
         """
         Get real-time price from WebSocket if available, otherwise fallback to REST API.
         
         Args:
             symbol: Stock symbol
             market_type: "KR" or "US"
+            excg_cd: Exchange code (e.g. NAS, NYS) for US stocks
             
         Returns:
             Dict with price information or None
@@ -120,12 +121,14 @@ class KisApi:
                 }
             return None
         else:
-            # For US stocks, extract exchange code from subscribed stocks or default to NAS
-            excg_cd = "NAS"
+            # For US stocks, use provided exchange or default
+            target_excg = excg_cd if excg_cd else "NAS"
+            
             if self.websocket and symbol in self.websocket.subscribed_stocks:
-                # Try to get exchange from subscription info if available
+                # Optimized: If we have subscription info, we could use it, but REST API needs code.
                 pass
-            price_data = self.get_overseas_price(symbol, excg_cd)
+                
+            price_data = self.get_overseas_price(symbol, target_excg)
             if price_data:
                 return {
                     'price': float(price_data.get('last', 0)),

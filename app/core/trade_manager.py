@@ -158,8 +158,12 @@ class TradeManager:
         logger.info("🔄 Starting portfolio sync...")
         self.update_balance()
         holdings = kis.get_my_stock_balance()
+        if holdings is None:
+            holdings = []
+            logger.warning("⚠️ Failed to fetch KR holdings (API Error or Safety Mode)")
+        
         if not holdings:
-            logger.warning("⚠️ No KR holdings found")
+            logger.warning("⚠️ No KR holdings found or API returned empty")
         else:
             logger.info(f"📦 Found {len(holdings)} KR holdings")
 
@@ -549,7 +553,7 @@ class TradeManager:
                 except: return 0.0
 
             # Get Price - Use WebSocket if available
-            price_data = kis.get_realtime_price(symbol, market_type)
+            price_data = kis.get_realtime_price(symbol, market_type, excg_cd=excg)
             
             if not price_data:
                 logger.warning(f"⚠️ {name}: No price data available")
