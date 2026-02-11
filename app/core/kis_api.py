@@ -372,7 +372,18 @@ class KisApi:
         res = requests.get(url, headers=headers, params=params, timeout=20)
         data = res.json()
         if res.status_code == 200 and 'output' in data:
-            return int(data['output']['ord_psbl_cash'])
+            # 1. nrcvb_buy_amt: Net Receiver Buy Amount (Buying power without margin) - Best for Scalping
+            # 2. ord_psbl_cash + ruse_psbl_amt: Manual Calculation
+            
+            # Try nrcvb_buy_amt first
+            nrcvb = int(data['output'].get('nrcvb_buy_amt', 0))
+            if nrcvb > 0:
+                return nrcvb
+            
+            # Fallback
+            cash = int(data['output']['ord_psbl_cash'])
+            reuse = int(data['output'].get('ruse_psbl_amt', 0))
+            return cash + reuse
         
         logger.warning(f"Failed to get orderable cash: {data}")
         return None

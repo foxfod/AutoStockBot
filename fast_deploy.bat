@@ -5,12 +5,21 @@ echo       🚀 Fast Deploy Helper (Git Push + Auto Deploy)
 echo ========================================================
 echo.
 
-:: 1. Ask for Commit Message
-set /p msg="Commit Message (Enter for default): "
+:: 1. Auto Version Update
+echo [0/4] Updating Version...
+python update_version.py
+if %errorlevel% neq 0 (
+    echo [ERROR] Version Update Cancelled or Failed.
+    pause
+    exit /b
+)
+
+:: Read Commit Message from file
+set /p msg=<.commit_msg
 if "%msg%"=="" set msg="Auto update via script"
 
 echo.
-echo [1/3] Adding changes...
+echo [1/4] Adding changes...
 git add .
 if %errorlevel% neq 0 (
     echo [ERROR] Git Add failed.
@@ -18,7 +27,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-echo [2/3] Committing...
+echo [2/4] Committing...
 git commit -m "%msg%"
 if %errorlevel% neq 0 (
     echo [INFO] Nothing to commit or error.

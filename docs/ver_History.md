@@ -102,3 +102,5 @@
     - `ai_analyzer.py`: OpenAI/Gemini 호출을 **비동기(Async)** 방식으로 변경하여 Non-blocking I/O 구현.
     - `selector.py`: 종목 분석 루프를 `asyncio.gather`를 사용한 **병렬 처리(Parallel Processing)**로 전환.
     - **결과**: 분석 속도가 획기적으로 개선되고, 분석 중에도 서버가 멈추지 않음.
+
+### [20260211_010-01] 주문가능금액 수정

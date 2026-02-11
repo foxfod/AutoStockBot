@@ -131,23 +131,64 @@ class Selector:
         """Helper for parallel processing"""
         symbol = stock['symbol']
         name = stock['name']
+        loop = asyncio.get_event_loop()
         
         try:
-            # Data Fetch (Still Sync potentially, or fast enough)
+            # Data Fetch (Blocking I/O -> ThreadPool)
             if market_type == "KR":
-                daily_data = kis.get_daily_price(symbol)
-                news = kis.get_news_titles(symbol)
+                daily_data = await loop.run_in_executor(None, kis.get_daily_price, symbol)
+                # News fetching is also blocking
+                # news = await loop.run_in_executor(None, kis.get_news_titles, symbol) 
+                # Optimization: Fetch news only if tech passes or in parallel?
+                # For now, let's keep it simple. But get_news_titles is also blocking.
+                # Let's run tech analysis first, then news if needed? 
+                # Actually, standard flow: Get Data -> Tech -> Filter -> News -> AI.
             else:
                 excg = stock.get('excg', 'NASD')
-                daily_data = kis.get_overseas_daily_price(symbol, excg)
-                news = []
+                daily_data = await loop.run_in_executor(None, kis.get_overseas_daily_price, symbol, excg)
                 
             if not daily_data: return None
             
-            # Technical Analysis
+            # Technical Analysis (CPU bound, fast enough, but can be offloaded if heavy)
             tech = technical.analyze(daily_data)
             
-            # Assess via AI (Async)
+            # Pre-filter before News/AI (Save resources)
+            if tech.get("status") in ["Error", "Not enough data"]: return None
+            
+            # Calculate Daily Change
+            try:
+                if len(daily_data) >= 2:
+                    # KIS Data structure check
+                    # KR: stck_clpr, US: clos (mapped in kis_api output? No, returns raw list)
+                    # US daily_price returns list of dicts. Keys depend on API.
+                    # kis.get_overseas_daily_price returns output2.
+                    # KR: stck_clpr. US: clos.
+                    
+                    curr = float(daily_data[0].get('stck_clpr') or daily_data[0].get('clos'))
+                    prev = float(daily_data[1].get('stck_clpr') or daily_data[1].get('clos'))
+                    
+                    if prev > 0:
+                        change_rate = ((curr - prev) / prev) * 100
+                        tech['daily_change'] = change_rate
+                    else:
+                        tech['daily_change'] = 0.0
+                else:
+                    tech['daily_change'] = 0.0
+            except:
+                tech['daily_change'] = 0.0
+
+            # 1. Tech Filters (Fail Fast)
+            if tech['rsi'] >= 75: return None
+            if tech['trend'] == "DOWN": return None
+            if tech['sma_5'] <= tech['sma_20']: return None
+            
+            # 2. Get News (Blocking) - Only if passed tech
+            news = []
+            if market_type == "KR":
+                news_items = await loop.run_in_executor(None, kis.get_news_titles, symbol)
+                news = [n['hts_pbnt_titl_cntt'] for n in news_items[:3]] if news_items else []
+            
+            # 3. Assess via AI (Async)
             analysis_result = await ai_analyzer.analyze_stock(name, news, tech)
             score = analysis_result.get('score', 0)
             reason = analysis_result.get('reason', 'Analysis Failed')
@@ -155,6 +196,7 @@ class Selector:
             if score >= 70:
                 stock['reason'] = reason
                 stock['score'] = score
+                stock['tech'] = tech # Attach tech info
                 return stock
         except Exception as e:
             logger.error(f"Error analyzing {name}: {e}")
