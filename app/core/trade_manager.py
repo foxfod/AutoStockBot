@@ -18,6 +18,12 @@ class TradeManager:
         self.trade_history = [] 
         self.manual_slots = {} # {market_type: count}
 
+    def set_manual_slots(self, market: str, count: int):
+        """Set manual slot limit for market"""
+        self.manual_slots[market] = int(count)
+        logger.info(f"Manual Slot Limit Set for {market}: {count}")
+
+
     def update_balance(self):
         """Fetch latest balance from KIS (KRW & USD)"""
         # 1. Domestic

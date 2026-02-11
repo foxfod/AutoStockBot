@@ -223,12 +223,21 @@ class Selector:
             for job in batch:
                 symbol = job['symbol']
                 res = batch_results.get(symbol)
-                if res and res.get('score', 0) >= 0:
+                
+                # Safe casting for score
+                raw_score = 0
+                if res:
+                    try:
+                        raw_score = float(res.get('score', 0))
+                    except (ValueError, TypeError):
+                        raw_score = 0
+
+                if res and raw_score >= 0:
                     scored_candidates.append({
                         "symbol": symbol,
                         "name": job['name'],
-                        "score": res['score'],
-                        "reason": res['reason'],
+                        "score": raw_score, # Use numeric score
+                        "reason": res.get('reason', 'N/A'),
                         "market": market_type,
                         "price": job['tech_summary']['close'],
                         "change": job['tech_summary']['daily_change']
@@ -601,7 +610,13 @@ class Selector:
                     report_lines.append(f"- {name}: 분석 실패")
                     continue
                     
-                score = ai_result.get('score', 0)
+                # Safe Score Casting
+                score = 0
+                try:
+                    score = float(ai_result.get('score', 0))
+                except (ValueError, TypeError):
+                    score = 0
+                    
                 reason = ai_result.get('reason', 'N/A')
                 
                 if score >= 60: 
