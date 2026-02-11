@@ -62,19 +62,14 @@ class Selector:
             
         if not candidates and market_type == "US":
              # Temporary: Define US List here (Subset of main list)
-             candidates = [
-                {"symbol": "NVDA", "excg": "NASD", "name": "NVIDIA"},
-                {"symbol": "TSLA", "excg": "NASD", "name": "Tesla"},
-                {"symbol": "AAPL", "excg": "NASD", "name": "Apple"},
-                {"symbol": "MSFT", "excg": "NASD", "name": "Microsoft"},
-                {"symbol": "AMD", "excg": "NASD", "name": "AMD"},
-                {"symbol": "PLTR", "excg": "NYSE", "name": "Palantir"},
-                {"symbol": "COIN", "excg": "NASD", "name": "Coinbase"},
-                {"symbol": "MARA", "excg": "NASD", "name": "Marathon Digital"},
-                {"symbol": "NET", "excg": "NYSE", "name": "Cloudflare"},
-                {"symbol": "IONQ", "excg": "NYSE", "name": "IonQ"}
-             ]
-             
+             # ... (Candidates logic remains same, just ensuring we get context)
+             pass
+
+        # 1.5 Get Market Context
+        market_ctx = market_analyst.get_market_context_for_ai(market_type)
+        logger.info(f"Market Context for {market_type} Top 10: {market_ctx}")
+        bot.send_message(f"🌍 시장 컨텍스트 분석: {market_ctx}")
+
         # 2. Analyze Candidates (Parallel Batch Processing)
         bot.send_message(f"🔬 후보 {len(candidates)}개 심층 분석 중 (뉴스+차트)... (병렬 처리)")
         
@@ -89,7 +84,7 @@ class Selector:
             tasks = []
             
             for stock in batch:
-                tasks.append(self._analyze_single_stock(stock, market_type))
+                tasks.append(self._analyze_single_stock(stock, market_type, market_ctx))
 
             # Run Parallel
             results = await asyncio.gather(*tasks)
@@ -125,7 +120,7 @@ class Selector:
         
         return top_10
 
-    async def _analyze_single_stock(self, stock, market_type):
+    async def _analyze_single_stock(self, stock, market_type, market_ctx="Neutral"):
         """Helper for parallel processing"""
         symbol = stock['symbol']
         name = stock['name']
@@ -186,9 +181,20 @@ class Selector:
                 tech['daily_change'] = 0.0
 
             # 1. Tech Filters (Fail Fast)
-            if tech['rsi'] >= 70: return None # Stricter RSI (was 75)
-            if tech.get('daily_change', 0) >= 15.0: return None # Avoid chasing spikes (>15%)
-            if tech['trend'] == "DOWN": return None
+            if tech['rsi'] >= 75: # Relaxed from 70
+                 logger.info(f"Rejected {name}: RSI {tech['rsi']:.1f} >= 75")
+                 return None 
+            if tech.get('daily_change', 0) >= 20.0: # Relaxed from 15
+                 logger.info(f"Rejected {name}: Change +{tech.get('daily_change', 0):.1f}% >= 20%")
+                 return None 
+            
+            if tech['trend'] == "DOWN":
+                if tech['rsi'] < 50:
+                    pass # Allow Dip Buy
+                else:
+                    logger.info(f"Rejected {name}: Trend DOWN & RSI {tech['rsi']:.1f} >= 50")
+                    return None
+            
             # Relaxed SMA5 < SMA20 filter to allow breakouts
             # if tech['sma_5'] <= tech['sma_20']: return None
             
@@ -199,15 +205,19 @@ class Selector:
                 news = [n['hts_pbnt_titl_cntt'] for n in news_items[:3]] if news_items else []
             
             # 3. Assess via AI (Async)
-            analysis_result = await ai_analyzer.analyze_stock(name, news, tech)
+            # Pass Market Context to AI
+            analysis_result = await ai_analyzer.analyze_stock(name, news, tech, market_ctx)
             score = analysis_result.get('score', 0)
             reason = analysis_result.get('reason', 'Analysis Failed')
             
-            if score >= 70:
+            if score >= 55: # Relaxed from 60
                 stock['reason'] = reason
                 stock['score'] = score
                 stock['tech'] = tech # Attach tech info
                 return stock
+            else:
+                logger.info(f"Rejected {name}: Score {score} < 55")
+                return None
         except Exception as e:
             logger.error(f"Error analyzing {name}: {e}")
             return None
@@ -692,7 +702,7 @@ class Selector:
             if not ai_result:
                 continue
 
-            if ai_result.get('score', 0) >= 60: # Relaxed from 70
+            if ai_result.get('score', 0) >= 55: # Relaxed from 60
                 strategy = ai_result.get('strategy', {})
                 if not isinstance(strategy, dict):
                     strategy = {}

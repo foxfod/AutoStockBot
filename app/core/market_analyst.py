@@ -70,20 +70,23 @@ class MarketAnalyst:
                 return {"trend": trend, "description": desc, "data": kospi}
                 
             else: # US
-                # Check NASDAQ (COMP)
-                # Note: KIS might return COMP or .IXIC depending on symbol mapping
-                nasdaq = kis.get_overseas_index("COMP", "NAS") # Nasdaq Composite
+                # Check NASDAQ via QQQ ETF (Proxy)
+                # KIS API Index tickers are unstable/unclear, so QQQ is a safe proxy.
+                nasdaq_proxy = kis.get_overseas_price("QQQ", "NAS")
                 
                 trend = "NEUTRAL"
                 desc = "Flat market"
                 
-                if nasdaq:
-                    rate = float(nasdaq.get('rate', 0).replace('%',''))
-                    if rate > 0.5: trend = "BULL"
-                    elif rate < -0.5: trend = "BEAR"
-                    desc = f"NASDAQ {'▲' if rate > 0 else '▼'}{rate}%"
+                if nasdaq_proxy:
+                    rate = float(nasdaq_proxy.get('rate', 0).replace('%',''))
                     
-                return {"trend": trend, "description": desc, "data": nasdaq}
+                    # Thresholds: Bull > 1.0%, Bear < -1.5%
+                    if rate > 1.0: trend = "BULL"
+                    elif rate < -1.5: trend = "BEAR"
+                    
+                    desc = f"NASDAQ(QQQ) {'▲' if rate > 0 else '▼'}{rate}%"
+                    
+                return {"trend": trend, "description": desc, "data": nasdaq_proxy}
                 
         except Exception as e:
             logger.error(f"Market Analysis Failed: {e}")

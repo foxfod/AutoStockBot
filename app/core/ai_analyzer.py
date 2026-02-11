@@ -22,11 +22,11 @@ class AIAnalyzer:
             self.gemini_model = None
             logger.warning("Gemini API Key not found. Using GPT only.")
 
-    async def analyze_stock(self, stock_name: str, news_list: list[str], tech_summary: dict) -> dict:
+    async def analyze_stock(self, stock_name: str, news_list: list[str], tech_summary: dict, market_ctx: str = "Neutral") -> dict:
         """
         Analyze stock using GPT (Primary) -> Gemini (Fallback) [Async].
         """
-        prompt = self._create_prompt(stock_name, news_list, tech_summary)
+        prompt = self._create_prompt(stock_name, news_list, tech_summary, market_ctx)
         
         # 1. Try GPT (Primary)
         try:
@@ -62,14 +62,17 @@ class AIAnalyzer:
         content = response.choices[0].message.content
         return json.loads(self._clean_json_text(content))
 
-    def _create_prompt(self, stock_name: str, news_list: list[str], tech_summary: dict) -> str:
+    def _create_prompt(self, stock_name: str, news_list: list[str], tech_summary: dict, market_ctx: str) -> str:
         if not news_list:
             news_text = "No recent news."
         else:
             news_text = json.dumps(news_list, ensure_ascii=False)
 
         return f"""
-        Analyze the following stock '{stock_name}' for a short-term scalping trade (day trading) at market open.
+        Analyze the following stock '{stock_name}' for potential UPSIDE TODAY based on Market Context & News.
+        
+        [Market Context]
+        {market_ctx}
         
         [Technical Indicators]
         - Close: {tech_summary.get('close')}
@@ -82,17 +85,18 @@ class AIAnalyzer:
         {news_text}
         
         Task:
-        1. Evaluate if this is a HIGH PROBABILITY buy opportunity. Be CONSERVATIVE.
-        2. **CRITICAL**: IF Daily Change > 15%, REJECT (Score < 50) due to "Chasing Highs".
-        3. IF RSI is > 70, penalize score significantly (Risk of top).
-        4. IF SMA5 < SMA20, Penalize Score UNLESS looking for "Dip Buy" or "Reversal".
-        5. Look for "Pullback" or "Early Uptrend" patterns. Avoid "Vertical Spikes".
-        6. IF News is old or irrelevant, do not boost score.
+        1. Evaluate if this stock is likely to OUTPERFORM today given the Market Context.
+        2. IF Market is Bearish/Down -> Be Conservative. Look for Defensive stocks or Short Candidates (if applicable).
+        3. IF Market is Bullish/Up -> Look for Momentum/Breakout stocks.
+        4. **CRITICAL**: IF Daily Change > 20%, REJECT (Score < 50) due to "Chasing Highs".
+        5. IF RSI is > 75, penalize score (Risk of top).
+        6. IF SMA5 < SMA20, Penalize Score UNLESS looking for "Dip Buy" or "Reversal".
+        7. Look for "Pullback" or "Early Uptrend" patterns. Avoid "Vertical Spikes".
         
         Return JSON format ONLY:
         {{
-            "score": <0-100 integer, 80+ means strong buy, 70-79 means risky buy, <70 is Pass>,
-            "reason": "<Korean explanation, max 2 sentences. Mention Risk/Reward. Must be in Korean (Hangul)>",
+            "score": <0-100 integer, 80+ Strong Buy>,
+            "reason": "<Korean explanation, max 2 sentences. Mention Market Context impact. Must be in Korean (Hangul)>",
             "action": "<Buy/Watch/Pass>",
             "strategy": {{
                 "entry": "<Suggestion>",
