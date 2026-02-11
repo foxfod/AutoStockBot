@@ -1,1 +1,1 @@
-[20260211_010-05] AI 분석
+[20260211_010-07] `main_auto_trade.py`: `SCAN_INTERVAL` 변수 정의 누락으로 인한 NameError 수정 (긴급 복구)

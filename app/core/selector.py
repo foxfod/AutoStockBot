@@ -178,7 +178,8 @@ class Selector:
                 tech['daily_change'] = 0.0
 
             # 1. Tech Filters (Fail Fast)
-            if tech['rsi'] >= 75: return None
+            if tech['rsi'] >= 70: return None # Stricter RSI (was 75)
+            if tech.get('daily_change', 0) >= 15.0: return None # Avoid chasing spikes (>15%)
             if tech['trend'] == "DOWN": return None
             if tech['sma_5'] <= tech['sma_20']: return None
             
@@ -338,10 +339,12 @@ class Selector:
                 if budget is not None and current_price > budget:
                     continue
                 
-                # 2.5 Strict Technical Filters (Relaxed)
+                # 2.5 Strict Technical Filters (Relaxed -> Tightened)
                 fail_reason = None
-                if tech_summary['rsi'] >= 75:
+                if tech_summary['rsi'] >= 70:
                      fail_reason = f"RSI 과열 ({tech_summary['rsi']:.1f})"
+                elif tech_summary.get('daily_change', 0) >= 15.0:
+                     fail_reason = f"급등 부담 (+{tech_summary.get('daily_change'):.1f}%)"
                 elif tech_summary['trend'] == "DOWN":
                      fail_reason = "하락 추세"
                 if fail_reason:
@@ -588,7 +591,24 @@ class Selector:
             # 3. Filters
             if tech_summary['sma_5'] <= tech_summary['sma_20']:
                 continue
-            if tech_summary['rsi'] >= 75: 
+            if tech_summary['rsi'] >= 70: # Stricter RSI
+                continue
+            
+            # Calculate daily change for US if not already in tech_summary
+            # (tech_summary usually has 'daily_change' if computed in analyze or earlier)
+            # Let's check if we computed it. 
+            # In select_us_stocks, we computed mapped_data but didn't explicitly add daily_change to tech_summary object yet? 
+            # technical.analyze might not add it. 
+            # Let's calculate it here for safety or rely on pre-calculation if added.
+            # Actually, let's just use the Price we have.
+            
+            daily_change = 0.0
+            if len(daily_data) >= 2:
+                 curr = float(daily_data[0]['clos'])
+                 prev = float(daily_data[1]['clos'])
+                 if prev > 0: daily_change = ((curr - prev) / prev) * 100
+            
+            if daily_change >= 15.0: # Avoid chasing US spikes too
                 continue
             if tech_summary['trend'] == "DOWN":
                continue 

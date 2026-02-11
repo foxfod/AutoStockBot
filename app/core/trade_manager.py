@@ -606,10 +606,10 @@ class TradeManager:
                     logger.info(f"🎯 {name}: Trailing stop triggered at {profit_rate:.2f}%")
             else:
                 # Normal Monitoring
-                if current_price >= trade['target_price']:
-                    # Hit Target -> Activate Trailing
+                # Activate Trailing Stop earlier (at +2%) to secure small profits
+                if profit_rate >= 2.0:
                     trade['trailing_active'] = True
-                    logger.info(f"✅ {name}: Target Hit. Activating Trailing Stop.")
+                    logger.info(f"✅ {name}: Profit > 2%. Activating Trailing Stop.")
                 elif current_price <= trade['stop_loss_price']:
                     action = "손절매 (Stop Loss)"
                     logger.warning(f"🛑 {name}: Stop-loss triggered! Current=${current_price:.2f} <= StopLoss=${stop_loss_price:.2f} (P&L={profit_rate:.2f}%)")
@@ -766,7 +766,7 @@ class TradeManager:
                 should_analyze = True
                 analysis_type = "RISK"
                 logger.info(f"⚠️ {name} ({market_type}) in Loss ({pnl_rate:.2f}%). Requesting AI Risk Analysis...")
-            elif pnl_rate >= 1.0:
+            elif pnl_rate >= 5.0: # Raised from 1.0 to 5.0 to avoid early exit
                 should_analyze = True
                 analysis_type = "PROFIT"
                 logger.info(f"💰 {name} ({market_type}) in Profit ({pnl_rate:.2f}%). Requesting AI Profit Analysis...")
