@@ -315,6 +315,66 @@ class AIAnalyzer:
         
         return "AI 모델을 사용할 수 없습니다."
 
+    async def recommend_trend_stocks(self, news_titles: list, market_type: str = "KR") -> list:
+        """
+        Analyze news headlines and recommend TOP 5-10 stocks that benefit from the news.
+        Returns: [{"name": "StockName", "code": "000000", "reason": "Why"}]
+        """
+        if not news_titles: return []
+        
+        news_str = "\n".join(f"- {t}" for t in news_titles)
+        
+        prompt = f"""
+        You are a seasoned stock market analyst. 
+        Given the following latest market news headlines ({market_type}),
+        Identify the **Top 5 most promising stocks** that will benefit TODAY.
+        
+        [Recent News]
+        {news_str}
+        
+        Task:
+        1. Extract relevant sectors/themes (e.g. AI, Semiconductor, Bio, Batteries).
+        2. Identify specific 'Leader Stocks' (대장주) for those themes.
+        3. Even if the stock is not explicitly named in the news, infer the beneficiary based on sector news.
+        4. Provide the stock Name and Code (if known). 
+           - For KR, try to provide 6-digit code. If unknown, leave empty or 000000.
+           - For US, provide Ticker Symbol (e.g. NVDA, TSLA).
+        
+        Output JSON Format ONLY:
+        [
+          {{ "name": "Stock Name", "code": "Ticker/Code", "reason": "Brief reason based on news" }},
+          ...
+        ]
+        """
+        
+        try:
+            # Call GPT (Primary)
+            res = await self.openai_client.chat.completions.create(
+                model=self.gpt_model,
+                messages=[
+                    {"role": "system", "content": "You are a professional stock analyst."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            response_text = res.choices[0].message.content
+            
+            # Simple cleanup
+            response_text = self._clean_json_text(response_text)
+            import json
+            data = json.loads(response_text)
+            
+            # Validate format
+            valid_list = []
+            if isinstance(data, list):
+                for item in data:
+                    if 'name' in item:
+                        valid_list.append(item)
+            return valid_list
+            
+        except Exception as e:
+            logger.error(f"Trend Analysis Error: {e}")
+            return []
+
     def _clean_json_text(self, text: str) -> str:
         if not text: return "{}"
         text = text.strip()

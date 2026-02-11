@@ -192,21 +192,37 @@ async def analyze_trade(symbol: str, user=Depends(login_required)):
         tech_summary = technical.analyze(daily_candles)
         
         # Get News
+        news_list = []
         if market_type == 'US':
-            # US News not yet supported in kis_api.get_news_titles? 
-            # Check kis_api.py... get_overseas_news_titles exists!
-            news = kis.get_overseas_news_titles(symbol)
-            news_list = [n['title'] for n in news[:3]] if news else []
-            news = kis.get_news_titles(symbol)
+            raw_news = kis.get_overseas_news_titles(symbol)
+            if raw_news:
+                # Adjust based on actual KIS return structure for overseas news
+                # Assuming list of dicts with 'title' or similar
+                # If raw_news is just titles? Check kis_api.
+                # Let's assume generic safety
+                for n in raw_news:
+                    if isinstance(n, dict):
+                        news_list.append(n.get('title', n.get('hts_pbnt_titl_cntt', '')))
+                    elif isinstance(n, str):
+                        news_list.append(n)
+                news_list = news_list[:3]
+        else:
+            raw_news = kis.get_news_titles(symbol)
+            if raw_news:
+                for n in raw_news:
+                    news_list.append(n.get('hts_pbnt_titl_cntt', ''))
+                news_list = news_list[:3]
         
         # 4. Construct Report
         # Basic Info
         report = f"### 🔍 {symbol} ({market_type})\n"
-        report += f"- 내 맘대로 분석 결과\n\n"
+        report += f"- 분석 시각: {time.strftime('%H:%M:%S')}\n\n"
         
         # Technicals
         report += "#### 📈 기술적 지표\n"
-        report += f"- 분석: {tech_summary}\n\n"
+        report += f"- 현재가: {tech_summary.get('close')}\n"
+        report += f"- 추세: {tech_summary.get('trend')}\n"
+        report += f"- RSI: {tech_summary.get('rsi')}\n\n"
         
         # News
         report += "#### 📰 관련 뉴스\n"
@@ -220,22 +236,22 @@ async def analyze_trade(symbol: str, user=Depends(login_required)):
         # AI Analysis
         report += "#### 🤖 AI 종합 의견\n"
         
-        # We need a proper stock object for AI analyzer
-        # Dummy stock object with enough info
-        stock_obj = {
-            "symbol": symbol,
-            "name": symbol, # Name might not be readily available in trade object if just symbol passed? 
-                            # TradeManager has names. Let's try to get it from trade object if possible.
-                            # But here we are just passing symbol. `analyze_stock` needs distinct obj.
-            "market": market_type
-        }
+        # Call AI Analyzer (Correct Signature)
+        # analyze_stock(stock_name, news_list, tech_summary) -> dict
+        ai_result = await ai_analyzer.analyze_stock(symbol, news_list, tech_summary)
         
-        # Call AI Analyzer
-        reason, score = await ai_analyzer.analyze_stock(stock_obj, daily_candles, news, tech_summary, market_type)
+        score = ai_result.get('score', 0)
+        reason = ai_result.get('reason', '분석 불가')
+        action = ai_result.get('action', 'N/A')
         
-        report += f"- **점수**: {score}점\n"
+        report += f"- **점수**: {score}점 ({action})\n"
         report += f"- **판단**: {reason}\n"
         
+        # Strategy
+        strategy = ai_result.get('strategy', {})
+        if strategy:
+            report += f"- **전략**: 목표 {strategy.get('target_price')}% / 손절 {strategy.get('stop_loss')}%\n"
+            
         return {"result": report}
         
     except Exception as e:

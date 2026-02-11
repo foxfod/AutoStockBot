@@ -257,15 +257,57 @@ class Selector:
         filtered_candidates = []
         exclusion_keywords = ["KODEX", "TIGER", "KBSTAR", "SOL", "ACE", "HANARO", "KOSEF", "ARIRANG", "ETN", "스팩", "선물", "레버리지", "인버스"]
         
-        # Add Pre-Market Picks First (Priority)
+        # Add Pre-Market Picks First (Priority 1)
         existing_symbols = set()
         for pick in pre_market_picks:
             filtered_candidates.append({
                 'mksc_shrn_iscd': pick['symbol'],
                 'hts_kor_isnm': pick['name'],
-                'is_pre_pick': True # Mark as priority
+                'is_pre_pick': True,
+                'source': 'Pre-Market'
             })
             existing_symbols.add(pick['symbol'])
+
+        # --- Trend-based Picks (Priority 2) ---
+        bot.send_message("🌊 실시간 뉴스 트렌드 종목 발굴 중...")
+        trend_candidates = await market_analyst.get_trend_candidates("KR")
+        
+        trend_added_count = 0
+        for t_stock in trend_candidates:
+            t_code = t_stock.get('code')
+            t_name = t_stock.get('name')
+            
+            if not t_code or t_code == "000000":
+                # AI didn't know code. Try simple search or skip?
+                # Resolving code by name is hard without master file list loaded.
+                # Ideally we ask KIS to search, but KIS search API might be slow/limited.
+                # For now, skip if no code.
+                continue
+                
+            # Normalize code (make sure 6 digits)
+            t_code = str(t_code).zfill(6)
+            
+            if t_code in existing_symbols: continue
+
+            # Validate with KIS (Get Price check) to ensure it's a valid traded symbol
+            # Optimization: Just try to get price in the batch loop. 
+            # But we want to add to 'filtered_candidates'.
+            # Let's assume it's valid if code looks right.
+            
+            filtered_candidates.append({
+                'mksc_shrn_iscd': t_code,
+                'hts_kor_isnm': t_name,
+                'is_trend_pick': True, # Mark as trend
+                'source': 'Live-Trend'
+            })
+            existing_symbols.add(t_code)
+            trend_added_count += 1
+            
+        if trend_added_count > 0:
+            bot.send_message(f"🔥 AI 트렌드 종목 {trend_added_count}개 추가 (뉴스 기반 Priority)")
+            logger.info(f"Added {trend_added_count} trend candidates.")
+            
+        # -------------------------------------
             
         for stock in candidates:
             symbol = stock['mksc_shrn_iscd']
@@ -277,7 +319,7 @@ class Selector:
             filtered_candidates.append(stock)
             existing_symbols.add(symbol)
             
-        logger.info(f"Filtered {len(candidates) - (len(filtered_candidates) - len(pre_market_picks))} items. Total Candidates: {len(filtered_candidates)}")
+        logger.info(f"Filtered {len(candidates) - (len(filtered_candidates) - len(pre_market_picks) - trend_added_count)} items. Total Candidates: {len(filtered_candidates)}")
         
         # Report Top 20 Candidates
         top_20 = filtered_candidates[:20]

@@ -120,8 +120,17 @@
 - `ai_analyzer.py`: 프롬프트 수정 (추격 매수 경고, 눌림목/조정 구간 선호 로직 추가)
 - `trade_manager.py`: 익절 로직 변경 (AI 조기 익절 +1% 제거, 트레일링 스탑 +2% 도달 시 즉시 가동)
 
+### [20260211_010-07] 트렌드 기반 종목 선정 기능 추가
+- `requirements.txt`: `beautifulsoup4` 추가 (뉴스 크롤링용)
+- `market_analyst.py`: 네이버 금융 뉴스 크롤링 및 트렌드 종목 추출 기능 추가 (`get_trend_candidates`)
+- `ai_analyzer.py`: AI 뉴스 분석 및 주도주 추출 프롬프트 추가 (`recommend_trend_stocks`)
+- `selector.py`: Top 10 선정 시 트렌드 종목(0순위) 우선 분석 로직 통합
+
 ### [20260211_010-05] AI 분석
 - `main_auto_trade.py`: `SCAN_INTERVAL` 변수 정의 누락으로 인한 NameError 수정 (긴급 복구)
 
 ### [20260211_010-07] `main_auto_trade.py`: `SCAN_INTERVAL` 변수 정의 누락으로 인한 NameError 수정 (긴급 복구)
 - ### [20260211_010-03] 긴급수정
+
+### [20260211_010-08] 트렌드 기반 종목선정 기능 추가
+- 1시간 마다 캐싱
