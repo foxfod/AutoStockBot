@@ -31,12 +31,15 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # Templates
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+from app.core.version import VERSION
+
 # Global Shared State
 server_context = {
     "log_queue": None,
     "bot_state": None,
     "trade_manager": None,
-    "is_paused": False
+    "is_paused": False,
+    "version": VERSION
 }
 
 class ConnectionManager:
