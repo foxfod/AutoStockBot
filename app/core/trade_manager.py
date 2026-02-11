@@ -433,8 +433,22 @@ class TradeManager:
                 res = kis.buy_order(symbol, qty, price=0) 
 
             # Standardize Failure (KIS returns rt_cd but no error key sometimes)
+            error_msg = res.get('msg1', 'KIS API Error') if isinstance(res, dict) else str(res)
+            
             if isinstance(res, dict) and res.get("rt_cd", "0") != "0":
-                 res['error'] = res.get('msg1', 'KIS API Error')
+                 res['error'] = error_msg
+                 
+                 # Check for Cash Shortage (Approx check)
+                 if "주문가능금액" in error_msg or "부족" in error_msg or res.get('msg_cd') == 'APBK0913':
+                     if market_type == "US" and self.capital_usd < 10 and self.capital_krw > 100000:
+                         bot.send_message(f"💡 [TIP] 달러 부족으로 매수 실패! 원화(KRW)는 충분합니다.\nKIS 앱에서 **[통합증거금]** 서비스를 신청하면 원화로 바로 미국 주식을 살 수 있습니다.")
+                     elif market_type == "KR":
+                          bot.send_message(f"💡 [TIP] 증거금 부족. 미체결 주문이 있거나 예수금이 부족합니다.")
+
+            if isinstance(res, dict) and res.get("rt_cd", "0") != "0":
+                 # Already handled above
+                 pass
+
 
             if "error" not in res:
                 currency = "USD" if market_type == "US" else "KRW"

@@ -305,7 +305,7 @@ async def refresh_top_picks(req: TopPicksRequest, user=Depends(login_required)):
         # It takes time, so we should probably run it and return, or wait?
         # User wants to see the result, so we await.
         
-        picks = await selector.select_pre_market_picks(req.market)
+        picks = await selector.select_pre_market_picks(req.market, force=True)
         
         # Read the file again to return full structure or just return picks
         # select_pre_market_picks returns the list of dicts.

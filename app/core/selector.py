@@ -58,11 +58,55 @@ class Selector:
                 candidates = candidates[:30] # Top 30
         else:
             # US: Use Fixed List (Tech/Volatility)
-            pass 
+            us_defaults = [
+                {"symbol": "NVDA", "excg": "NASD", "name": "NVIDIA"},
+                {"symbol": "TSLA", "excg": "NASD", "name": "Tesla"},
+                {"symbol": "AAPL", "excg": "NASD", "name": "Apple"},
+                {"symbol": "MSFT", "excg": "NASD", "name": "Microsoft"},
+                {"symbol": "GOOGL", "excg": "NASD", "name": "Alphabet"},
+                {"symbol": "AMZN", "excg": "NASD", "name": "Amazon"},
+                {"symbol": "META", "excg": "NASD", "name": "Meta"},
+                {"symbol": "AMD", "excg": "NASD", "name": "AMD"},
+                {"symbol": "INTC", "excg": "NASD", "name": "Intel"},
+                {"symbol": "MU", "excg": "NASD", "name": "Micron"},
+                {"symbol": "AVGO", "excg": "NASD", "name": "Broadcom"},
+                {"symbol": "QCOM", "excg": "NASD", "name": "Qualcomm"},
+                {"symbol": "PLTR", "excg": "NYSE", "name": "Palantir"},
+                {"symbol": "SNOW", "excg": "NYSE", "name": "Snowflake"},
+                {"symbol": "CRWD", "excg": "NASD", "name": "CrowdStrike"},
+                {"symbol": "NET", "excg": "NYSE", "name": "Cloudflare"},
+                {"symbol": "DDOG", "excg": "NASD", "name": "Datadog"},
+                {"symbol": "RIVN", "excg": "NASD", "name": "Rivian"},
+                {"symbol": "LCID", "excg": "NASD", "name": "Lucid"},
+                {"symbol": "NIO", "excg": "NYSE", "name": "NIO"},
+                {"symbol": "F", "excg": "NYSE", "name": "Ford"},
+                {"symbol": "GM", "excg": "NYSE", "name": "General Motors"},
+                {"symbol": "SOFI", "excg": "NASD", "name": "SoFi"},
+                {"symbol": "HOOD", "excg": "NASD", "name": "Robinhood"},
+                {"symbol": "COIN", "excg": "NASD", "name": "Coinbase"},
+                {"symbol": "SQ", "excg": "NYSE", "name": "Block (Square)"},
+                {"symbol": "PYPL", "excg": "NASD", "name": "PayPal"},
+                {"symbol": "MARA", "excg": "NASD", "name": "Marathon Digital"},
+                {"symbol": "RIOT", "excg": "NASD", "name": "Riot Platforms"},
+                {"symbol": "CLSK", "excg": "NASD", "name": "CleanSpark"},
+                {"symbol": "UBER", "excg": "NYSE", "name": "Uber"},
+                {"symbol": "NFLX", "excg": "NASD", "name": "Netflix"},
+                {"symbol": "DIS", "excg": "NYSE", "name": "Disney"},
+                {"symbol": "DKNG", "excg": "NASD", "name": "DraftKings"},
+                {"symbol": "PENN", "excg": "NASD", "name": "Penn Entertainment"},
+                {"symbol": "QQQ", "excg": "NASD", "name": "Invesco QQQ"},
+                {"symbol": "TQQQ", "excg": "NASD", "name": "ProShares UltraPro QQQ"},
+                {"symbol": "SOXL", "excg": "NYSE", "name": "Direxion Daily Semiconductor Bull 3X"}
+            ]
+            for s in us_defaults:
+                candidates.append({
+                    "symbol": s['symbol'],
+                    "name": s['name'],
+                    "market": "US",
+                    "excg": s['excg']
+                })
             
         if not candidates and market_type == "US":
-             # Temporary: Define US List here (Subset of main list)
-             # ... (Candidates logic remains same, just ensuring we get context)
              pass
 
         # 1.5 Get Market Context
@@ -70,31 +114,127 @@ class Selector:
         logger.info(f"Market Context for {market_type} Top 10: {market_ctx}")
         bot.send_message(f"🌍 시장 컨텍스트 분석: {market_ctx}")
 
-        # 2. Analyze Candidates (Parallel Batch Processing)
-        bot.send_message(f"🔬 후보 {len(candidates)}개 심층 분석 중 (뉴스+차트)... (병렬 처리)")
+        # --- [Top-Down Optimization] ---
+        # Unified for both KR and US
+        logger.info(f"🤖 Step 1: Top-Down AI Screening for {len(candidates)} candidates...")
+        bot.send_message(f"🤖 AI가 시장 상황에 맞는 1차 선별 중... (후보 {len(candidates)}개)")
+        
+        target_symbols = await ai_analyzer.select_candidates_by_trend(candidates, market_ctx)
+        
+        # Filter candidates
+        filtered_candidates = [s for s in candidates if s['symbol'] in target_symbols]
+        
+        # Fallback if AI returns empty
+        if not filtered_candidates:
+             filtered_candidates = candidates[:15]
+             logger.warning("AI Screening returned empty, using fallback subset.")
+
+        logger.info(f"🎯 AI Selected {len(filtered_candidates)} stocks for Deep Analysis.")
+        bot.send_message(f"🎯 1차 선별 완료: {len(filtered_candidates)}개 종목 집중 분석 시작...")
+        
+        analysis_jobs = []
+        
+        # Unified Analysis Loop
+        for stock in filtered_candidates:
+            symbol = stock['symbol']
+            name = stock['name']
+            
+            # Helper for exchange (KR has no excg needed usually, or 'KRX')
+            excg = stock.get('excg', '') 
+            
+            await asyncio.sleep(0.1)
+            
+            try:
+                # 1. Get Daily Data (Unified call if possible, or split)
+                daily_data = []
+                if market_type == "KR":
+                     daily_data = kis.get_daily_price(symbol)
+                else:
+                     daily_data = kis.get_overseas_daily_price(symbol, excg)
+                
+                if not daily_data:
+                    logger.warning(f"No Daily Data for {name}")
+                    continue
+                
+                # Tech Analysis Prep
+                mapped_data = []
+                for d in daily_data:
+                    if market_type == "KR":
+                        mapped_data.append(d) # KIS KR returns correct keys usually? Check utils.
+                        # Actually KIS KR keys are stck_clpr etc. check helper.
+                        # kis_api.get_daily_price returns list of dicts.
+                        # technical.analyze handles standard keys.
+                        # Let's ensure mapping is correct.
+                        # KR API returns: stck_bsop_date, stck_clpr, etc.
+                        # US API returns: xymd, clos, etc.
+                        pass 
+                    else:
+                        # US Mapping
+                        mapped_data.append({
+                            "stck_bsop_date": d['xymd'],
+                            "stck_clpr": d['clos'],
+                            "stck_oprc": d['open'],
+                            "stck_hgpr": d['high'],
+                            "stck_lwpr": d['low'],
+                            "acml_vol": d['tvol']
+                        })
+                
+                if market_type == "KR":
+                     mapped_data = daily_data # Assuming get_daily_price returns standard keys compatible with technical
+                
+                # 2. Tech Analysis
+                tech_summary = technical.analyze(mapped_data)
+                
+                # Daily Change
+                daily_change = 0.0
+                if len(daily_data) >= 2:
+                    c = float(daily_data[0]['stck_clpr']) if market_type == "KR" else float(daily_data[0]['clos'])
+                    p = float(daily_data[1]['stck_clpr']) if market_type == "KR" else float(daily_data[1]['clos'])
+                    if p > 0: daily_change = ((c - p) / p) * 100
+                
+                # 3. Add to Job (No Filter)
+                analysis_jobs.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "excg": excg,
+                    "tech_summary": {
+                        **tech_summary,
+                        "daily_change": daily_change
+                    },
+                    "news_titles": [] 
+                })
+                
+            except Exception as e:
+                logger.error(f"Error preparing {name}: {e}")
+                continue
+
+        logger.info(f"Data collected. Analyzing {len(analysis_jobs)} stocks...")
+        bot.send_message(f"🔬 데이터 수집 완료. Hot Trend 심층 분석 중... ({len(analysis_jobs)}개)")
         
         scored_candidates = []
-        BATCH_SIZE = 10 # Process 10 at a time to avoid rate limits/overload
+        BATCH_SIZE = 5
         
-        for i in range(0, len(candidates), BATCH_SIZE):
-            batch = candidates[i : i + BATCH_SIZE]
-            logger.info(f"Processing Batch {i//BATCH_SIZE + 1} ({len(batch)} items)...")
+        for i in range(0, len(analysis_jobs), BATCH_SIZE):
+            batch = analysis_jobs[i : i + BATCH_SIZE]
             
-            # Prepare Tasks
-            tasks = []
+            # Use NEW analyze_hot_trends
+            batch_results = await ai_analyzer.analyze_hot_trends(batch)
             
-            for stock in batch:
-                tasks.append(self._analyze_single_stock(stock, market_type, market_ctx))
-
-            # Run Parallel
-            results = await asyncio.gather(*tasks)
+            for job in batch:
+                symbol = job['symbol']
+                res = batch_results.get(symbol)
+                if res and res.get('score', 0) >= 0:
+                    scored_candidates.append({
+                        "symbol": symbol,
+                        "name": job['name'],
+                        "score": res['score'],
+                        "reason": res['reason'],
+                        "market": market_type,
+                        "price": job['tech_summary']['close'],
+                        "change": job['tech_summary']['daily_change']
+                    })
             
-            for res in results:
-                if res:
-                    scored_candidates.append(res)
-            
-            # Rate Limit Buffer
-            await asyncio.sleep(1)
+            await asyncio.sleep(1.0)
 
         # 3. Sort & Select Top 10
         scored_candidates.sort(key=lambda x: x['score'], reverse=True)
@@ -113,13 +253,24 @@ class Selector:
             logger.error(f"Failed to save top picks: {e}")
             
         # 5. Report
-        msg = f"🌟 [{market_type}] 오늘의 Top 10 유망 종목\n"
-        for i, s in enumerate(top_10, 1):
-            msg += f"{i}. {s['name']} ({s['symbol']}) - {s['score']}점\n"
-        bot.send_message(msg)
+        if top_10:
+            msg = f"🌟 [{market_type}] 오늘의 Hot Trend Top 10 (AI 선정)\n"
+            for i, s in enumerate(top_10, 1):
+                msg += f"{i}. {s['name']} ({s['score']}점)\n   └ {s['reason']}\n"
+            bot.send_message(msg)
+        else:
+            bot.send_message(f"❌ [{market_type}] 분석 결과가 없습니다.")
         
         return top_10
 
+    # Old _analyze_single_stock NOT USED for Top 10 anymore. 
+    # Can ideally remove or keep for other functions (e.g. searching).
+    # Buying Logic likely uses _analyze_single_stock still? 
+    # Actually Buying Logic calls `selector.select_stock_for_buying`? No, main loops call `find_breakout_stocks`.
+    # `find_breakout_stocks` likely uses `_analyze_single_stock`.
+    # So we MUST NOT delete `_analyze_single_stock`.
+    # But for `select_pre_market_picks`, we have fully replaced the loop.
+    
     async def _analyze_single_stock(self, stock, market_type, market_ctx="Neutral"):
         """Helper for parallel processing"""
         symbol = stock['symbol']
@@ -609,11 +760,27 @@ class Selector:
                 us_candidates.append(stock)
                 existing_symbols.add(stock['symbol'])
         
-        logger.info(f"US Candidates: {len(us_candidates)} items (Pre-Picks: {len(pre_market_picks)})")
+        # --- [Top-Down Optimization] ---
+        # Instead of fetching data for all 60 stocks, let AI pick ~15 first.
+        logger.info(f"🤖 Step 1: Top-Down AI Screening for {len(us_candidates)} candidates...")
+        bot.send_message(f"🤖 AI가 시장 상황({market_ctx[:20]}...)에 맞는 테마주 1차 선별 중...")
+        
+        target_symbols = await ai_analyzer.select_candidates_by_trend(us_candidates, market_ctx)
+        
+        # Filter us_candidates to only target_symbols
+        filtered_candidates = [s for s in us_candidates if s['symbol'] in target_symbols]
+        
+        # If AI fails or returns empty, fallback to a subset of defaults
+        if not filtered_candidates:
+             filtered_candidates = us_candidates[:15]
+             logger.warning("AI Screening returned empty, using fallback subset.")
+
+        logger.info(f"🎯 AI Selected {len(filtered_candidates)} stocks for Deep Analysis.")
+        bot.send_message(f"🎯 1차 선별 완료: {len(filtered_candidates)}개 종목 집중 분석 시작...")
         
         analysis_jobs = []
         
-        for stock in us_candidates:
+        for stock in filtered_candidates:
             symbol = stock['symbol']
             excg = stock['excg']
             name = stock['name']
@@ -628,11 +795,8 @@ class Selector:
                     continue
                     
                 current_price = float(daily_data[0]['clos'])
-                safe_budget = budget if budget else 0
-                
-                if budget is not None and current_price > safe_budget:
-                    logger.info(f"Skipping {name}: Price {current_price} > Budget {safe_budget:.1f} (Too Expensive)")
-                    continue
+                # strict budget check moved to trading, but simple check helps
+                # if budget and current_price > budget: continue 
                     
                 mapped_data = []
                 for d in daily_data:
@@ -647,83 +811,91 @@ class Selector:
                 
                 # 2. Tech Analysis
                 tech_summary = technical.analyze(mapped_data)
-                if tech_summary.get("status") in ["Error", "Not enough data"]:
-                    continue
                 
-                # 3. Filters
-                if tech_summary['rsi'] >= 75: # Relaxed RSI from 70 to 75
-                    logger.info(f"Skipping {name}: High RSI ({tech_summary['rsi']:.1f})")
-                    continue
-                
-                # Calculate daily change for US if not already in tech_summary
+                # Check Daily Change (For AI Context)
                 daily_change = 0.0
                 if len(daily_data) >= 2:
                      curr = float(daily_data[0]['clos'])
                      prev = float(daily_data[1]['clos'])
                      if prev > 0: daily_change = ((curr - prev) / prev) * 100
                 
-                if daily_change >= 20.0: # Relaxed from 15% to 20%
-                    logger.info(f"Skipping {name}: Too Volatile (+{daily_change:.1f}%)")
-                    continue
-                if tech_summary['trend'] == "DOWN":
-                   # Relaxed: Allow DOWN trend if RSI is low (Dip Buying opportunity)
-                   if tech_summary['rsi'] < 50:
-                       logger.info(f"{name}: Down Trend but RSI {tech_summary['rsi']:.1f} < 50. Allowing as Dip Candidate.")
-                   else:
-                       logger.info(f"Skipping {name}: Down Trend & RSI {tech_summary['rsi']:.1f} >= 50")
-                       continue 
-                   
+                # NO FILTERS FOR HOT TRENDS (Pass Everything)
+
                 # 4. Prepare Job
                 analysis_jobs.append({
                     "symbol": symbol,
                     "name": name,
                     "excg": excg,
-                    "tech_summary": tech_summary,
+                    "tech_summary": {
+                        **tech_summary,
+                        "daily_change": daily_change
+                    },
                     "news_titles": [] 
                 })
             except Exception as e:
-                logger.error(f"Error processing {name} in US selection: {e}")
+                logger.error(f"Error processing {name} in Top 10: {e}")
                 continue
             
-        logger.info(f"US Data collected for {len(analysis_jobs)} stocks. Analyzing...")
+        logger.info(f"US Data collected. Analyzing...")
 
-        logger.info(f"US Data collected for {len(analysis_jobs)} stocks. Analyzing (Batch)...")
         
-        for job in analysis_jobs:
-            job['market_status'] = market_ctx
-            
-        batch_results = await ai_analyzer.analyze_stocks_batch(analysis_jobs)
+        scored_candidates = []
+        BATCH_SIZE = 5
         
-        selected = []
-        for job in analysis_jobs:
-            symbol = job['symbol']
+        for i in range(0, len(analysis_jobs), BATCH_SIZE):
+            batch = analysis_jobs[i : i + BATCH_SIZE]
+            current_batch_num = i // BATCH_SIZE + 1
+            total_batches = (len(analysis_jobs) + BATCH_SIZE - 1) // BATCH_SIZE
             
-            ai_result = batch_results.get(symbol, {})
-            if not ai_result:
-                continue
-
-            if ai_result.get('score', 0) >= 55: # Relaxed from 60
-                strategy = ai_result.get('strategy', {})
-                if not isinstance(strategy, dict):
-                    strategy = {}
-                
-                selected.append({
-                    "symbol": job['symbol'],
-                    "name": job['name'],
-                    "price": job['tech_summary']['close'],
-                    "score": ai_result['score'],
-                    "reason": ai_result['reason'],
-                    "action": ai_result.get('action', 'Watch'),
-                    "target": strategy.get('target_price'),
-                    "stop_loss": strategy.get('stop_loss'),
-                    "rsi": job['tech_summary']['rsi'],
-                    "market_type": "US",
-                    "excg": job['excg']
-                })
-                logger.info(f"Selected US: {job['name']} ({ai_result['score']})")
-
-        selected.sort(key=lambda x: x['score'], reverse=True)
-        return selected
+            bot.send_message(f"🔥 Hot Trend 분석 중... {current_batch_num}/{total_batches}")
+            
+            # Use NEW analyze_hot_trends
+            batch_results = await ai_analyzer.analyze_hot_trends(batch)
+            
+            success_cnt = 0
+            for job in batch:
+                symbol = job['symbol']
+                res = batch_results.get(symbol)
+                if res and res.get('score', 0) >= 0: # Accept logic
+                    scored_candidates.append({
+                        "symbol": symbol,
+                        "name": job['name'],
+                        "score": res['score'],
+                        "reason": res['reason'],
+                        "market": market_type,
+                        "price": job['tech_summary']['close'],
+                        "change": job['tech_summary']['daily_change']
+                    })
+                    success_cnt += 1
+            
+            await asyncio.sleep(1.0) # Rate limit
+        
+        # 3. Sort & Select Top 10 (Highest AI Score)
+        scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+        top_10 = scored_candidates[:10]
+        
+        # 4. Save
+        try:
+            os.makedirs("app/data", exist_ok=True)
+            with open(TOP_PICKS_FILE, "w", encoding='utf-8') as f:
+                json.dump({
+                    "date": today_str,
+                    "market": market_type,
+                    "picks": top_10
+                }, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save top picks: {e}")
+            
+        # 5. Report
+        if top_10:
+            msg = f"🌟 [{market_type}] 오늘의 Hot Trend Top 10 (AI 선정)\n"
+            for i, s in enumerate(top_10, 1):
+                msg += f"{i}. {s['name']} ({s['score']}점)\n   └ {s['reason']}\n"
+            bot.send_message(msg)
+        else:
+            bot.send_message(f"❌ 분석 결과가 없습니다.")
+        
+        return top_10
 
     async def assess_risk(self, symbol: str, current_price: float, buy_price: float, daily_data: list, news_titles: list) -> dict:
         """

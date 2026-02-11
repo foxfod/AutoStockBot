@@ -271,7 +271,7 @@ async def trading_loop():
                 # 1. Scanning
                 time_since = (now - state['last_scan_time']).total_seconds() / 60
                 is_scan_time = (
-                    is_time_in_range(US_SCAN_START, dtime(4, 0), t) and
+                    is_time_in_range(US_SCAN_START, dtime(5, 0), t) and
                     time_since >= SCAN_INTERVAL
                 )
                 

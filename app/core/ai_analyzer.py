@@ -452,4 +452,120 @@ class AIAnalyzer:
                 
         return {"decision": "LIQUIDATE", "reason": "AI Error (Safety Liquidate)"}
 
+    async def analyze_hot_trends(self, jobs: list) -> dict:
+        """
+        Analyze stocks for 'Top 10 Hot Trends' (Pure AI, No Technical Filter).
+        Prioritize: News Catalyst, Sector Strength, Momentum (Even if High RSI).
+        """
+        if not jobs:
+            return {}
+            
+        # Construct Batch Prompt
+        market_context = jobs[0].get('market_status', 'Neutral Market')
+        
+        prompt = f"Current Market Environment: {market_context}\n\n"
+        prompt += "Identify the TOP 'HOT' stocks from the list below for a 'Must Watch' list.\n"
+        prompt += "Focus on: 1. Strong News/Catalyst 2. Sector Rotation 3. Explostive Momentum.\n"
+        prompt += "**IGNORE Technical Overbought signals (RSI > 75 is OK for Hot stocks).**\n"
+        
+        prompt += "Return JSON: { 'SYMBOL': { 'score': <0-100, Hotness>, 'reason': '<Korean explanation>' } }\n\n"
+        
+        for job in jobs:
+            daily_change = job['tech_summary'].get('daily_change', 0.0)
+            prompt += f"--- Stock: {job['name']} ({job['symbol']}) ---\n"
+            prompt += f"Change: {daily_change:.2f}%\n"
+            prompt += f"Technical: Trend={job['tech_summary']['trend']}, RSI={job['tech_summary']['rsi']}\n"
+            prompt += f"News: {job['news_titles']}\n\n"
+            
+        prompt += """
+        Criteria:
+        1. Score based on 'Excitement' and 'Potential for today'. 
+           - Good Earnings/Contract News = 90+
+           - Strong Sector Move (e.g. AI Rally) = 80+
+           - Just momentum without news = 70+
+           - Bad News / Boring = < 50
+        2. Describe the 'Reason' engagingly in Korean (e.g. 'AI 섹터 수급 폭발', '실적 서프라이즈').
+        """
+        
+        # Call AI (GPT -> Gemini)
+        response_text = ""
+        try:
+            logger.info(f"Hot Trend Analysis for {len(jobs)} stocks (GPT)...")
+            res = await self.openai_client.chat.completions.create(
+                model=self.gpt_model,
+                messages=[{"role": "system", "content": "You are a momentum trader."}, {"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            response_text = res.choices[0].message.content
+        except Exception as e:
+            logger.error(f"GPT Hot Trend Failed: {e}. Switching to Gemini...")
+            if self.gemini_model:
+                try:
+                    res = await self.gemini_model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
+                    response_text = res.text
+                except Exception as g_e:
+                    logger.error(f"Gemini Hot Trend Failed: {g_e}")
+                    return {}
+            else:
+                return {}
+
+        # Parse
+        try:
+             return json.loads(self._clean_json_text(response_text))
+        except:
+             logger.error("Failed to parse Hot Trend JSON")
+             return {}
+
+    async def select_candidates_by_trend(self, stock_list: list, market_ctx: str) -> list:
+        """
+        [Top-Down Optimization]
+        Select Top 15 candidates from the universe based on Market Context & Sector Rotation.
+        Returns: List of symbols (e.g. ['NVDA', 'TSLA', ...])
+        """
+        # Format list for prompt
+        stocks_str = ", ".join([f"{s['name']}({s['symbol']})" for s in stock_list])
+        
+        prompt = f"""
+        You are a Global Macro Strategist.
+        
+        [Current Market Context]
+        {market_ctx}
+        
+        [Candidate Universe]
+        {stocks_str}
+        
+        Task:
+        1. Based on the Market Context (e.g. Inflation, AI Boom, War, Rate Cuts),
+        2. Select the **Top 15 Stocks** from the list that are most likely to have high volatility or momentum TODAY.
+        3. Logic:
+           - If Tech is rallying, pick NVDA, AMD, SOXL, etc.
+           - If Defensive, pick XOM, PFE, KO.
+           - If Tesla is newsy, pick TSLA, RIVN.
+           
+        Return JSON ONLY:
+        {{
+            "selected_symbols": ["SYM1", "SYM2", ...],
+            "reason": "Brief strategy summary"
+        }}
+        """
+        
+        try:
+            logger.info("🤖 AI Pre-Filtering Candidates (Top-Down)...")
+            res = await self.openai_client.chat.completions.create(
+                model=self.gpt_model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(self._clean_json_text(res.choices[0].message.content))
+            selected = data.get('selected_symbols', [])
+            logger.info(f"✅ AI Selected {len(selected)} candidates: {selected}")
+            return selected
+            
+        except Exception as e:
+            logger.error(f"AI Pre-Filter Failed: {e}")
+            # Fallback: Return first 10 stocks or safe defaults
+            return [s['symbol'] for s in stock_list[:15]]
+
+
+
 ai_analyzer = AIAnalyzer()
