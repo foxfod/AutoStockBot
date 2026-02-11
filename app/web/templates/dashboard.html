@@ -375,8 +375,46 @@
                 renderTrades(currentTrades);
                 document.getElementById('active-count').innerText = Object.keys(currentTrades).length;
 
+                // 4. Market Info
+                if (data.market_info) {
+                    renderMarketInfo(data.market_info);
+                }
+
             } catch (e) {
                 console.error("State fetch error", e);
+            }
+        }
+
+        function renderMarketInfo(info) {
+            const container = document.getElementById('market-marquee');
+            if (!info || Object.keys(info).length === 0) return;
+
+            const mapName = {
+                'kospi': 'KOSPI', 'kosdaq': 'KOSDAQ', 'nasdaq': 'NASDAQ', 'dji': 'Dow Jones', 'sp500': 'S&P 500',
+                'gold': 'Gold', 'silver': 'Silver', 'oil': 'WTI Oil',
+                'usd_krw': 'USD/KRW', 'eur_krw': 'EUR/KRW', 'jpy_krw': 'JPY/KRW'
+            };
+
+            const html = Object.entries(info).map(([key, data]) => {
+                if (key === 'last_updated') return '';
+                const name = mapName[key] || key.toUpperCase();
+                const price = data.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                const change = data.change > 0 ? `+${data.change.toFixed(2)}` : data.change.toFixed(2);
+                const rate = data.rate > 0 ? `+${data.rate.toFixed(2)}%` : `${data.rate.toFixed(2)}%`;
+                const color = data.change > 0 ? 'text-red-400' : (data.change < 0 ? 'text-blue-400' : 'text-gray-400');
+
+                return `
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-gray-300">${name}</span>
+                        <span class="text-white">${price}</span>
+                        <span class="${color} text-xs">(${rate})</span>
+                    </div>
+                `;
+            }).join('');
+
+            // Only update if content changed to avoid jitter (simple check)
+            if (container.innerHTML !== html) {
+                container.innerHTML = html;
             }
         }
 

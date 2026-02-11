@@ -41,7 +41,7 @@ async def run_selection_task(market: str, task_type: str):
             logger.info(f"Running Top 10 selection for {market}...")
             # This returns list, but we might want to store it somewhere or just run it?
             # select_pre_market_picks saves to json.
-            await selector.select_pre_market_picks(market)
+            await selector.select_pre_market_picks(market, force=True)
         else:
             logger.info(f"Running manual scan for {market}...")
             if market == "US":
@@ -51,10 +51,6 @@ async def run_selection_task(market: str, task_type: str):
                 await selector.select_stocks()
                 
         logger.info(f"{market} {task_type} complete.")
-    except Exception as e:
-        logger.error(f"Selection failed: {e}")
-    finally:
-        is_running = False
     except Exception as e:
         logger.error(f"Selection failed: {e}")
     finally:

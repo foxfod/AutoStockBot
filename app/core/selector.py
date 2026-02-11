@@ -11,7 +11,7 @@ class Selector:
     def __init__(self):
         pass
 
-    async def select_pre_market_picks(self, market_type="KR"):
+    async def select_pre_market_picks(self, market_type="KR", force=False):
         """
         Pre-Market Top 10 Selection (30 mins before open).
         Analyzes Market Context + News + Technicals to pick 10 promising stocks.
@@ -29,7 +29,7 @@ class Selector:
         today_str = datetime.now().strftime("%Y-%m-%d")
         
         try:
-            if os.path.exists(TOP_PICKS_FILE):
+            if not force and os.path.exists(TOP_PICKS_FILE):
                 with open(TOP_PICKS_FILE, "r", encoding='utf-8') as f:
                     data = json.load(f)
                     if data.get("date") == today_str and data.get("market") == market_type:
