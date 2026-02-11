@@ -79,7 +79,7 @@ class Selector:
         bot.send_message(f"🔬 후보 {len(candidates)}개 심층 분석 중 (뉴스+차트)... (병렬 처리)")
         
         scored_candidates = []
-        BATCH_SIZE = 5 # Process 5 at a time to avoid rate limits/overload
+        BATCH_SIZE = 10 # Process 10 at a time to avoid rate limits/overload
         
         for i in range(0, len(candidates), BATCH_SIZE):
             batch = candidates[i : i + BATCH_SIZE]
@@ -143,8 +143,18 @@ class Selector:
                 # Actually, standard flow: Get Data -> Tech -> Filter -> News -> AI.
             else:
                 excg = stock.get('excg', 'NASD')
-                daily_data = await loop.run_in_executor(None, kis.get_overseas_daily_price, symbol, excg)
-                
+                raw_data = await loop.run_in_executor(None, kis.get_overseas_daily_price, symbol, excg)
+                daily_data = []
+                if raw_data:
+                    for d in raw_data:
+                        daily_data.append({
+                            "stck_bsop_date": d['xymd'],
+                            "stck_clpr": d['clos'],
+                            "stck_oprc": d['open'],
+                            "stck_hgpr": d['high'],
+                            "stck_lwpr": d['low'],
+                            "acml_vol": d['tvol']
+                        })
             if not daily_data: return None
             
             # Technical Analysis (CPU bound, fast enough, but can be offloaded if heavy)
@@ -682,7 +692,7 @@ class Selector:
             if not ai_result:
                 continue
 
-            if ai_result.get('score', 0) >= 70:
+            if ai_result.get('score', 0) >= 60: # Relaxed from 70
                 strategy = ai_result.get('strategy', {})
                 if not isinstance(strategy, dict):
                     strategy = {}

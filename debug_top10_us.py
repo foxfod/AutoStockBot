@@ -16,9 +16,14 @@ sys.stdout.reconfigure(encoding='utf-8')
 async def test_top10_us():
     from app.core.selector import selector
     
-    print("🚀 Triggering US Top 10 Selection...")
+    print("🚀 Triggering US Top 10 Selection (FORCE REFRESH)...")
+    import time
+    start = time.time()
     try:
-        picks = await selector.select_pre_market_picks("US")
+        # Pass force=True to bypass cache
+        picks = await selector.select_pre_market_picks("US", force=True)
+        elapsed = time.time() - start
+        print(f"⏱️ Elapsed: {elapsed:.2f} seconds")
         print(f"✅ Result ({len(picks)} items):")
         for p in picks:
             print(f"- {p['name']} ({p['symbol']}): {p['score']}")
