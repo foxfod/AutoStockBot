@@ -42,7 +42,7 @@ if %errorlevel% neq 0 (
 )
 
 echo [4/4] Connecting to Remote Server...
-ssh -i "C:\Users\foxfo\.ssh\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && rm -f app/data/top_picks.json && git stash && git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart scalping_bot"
+ssh -i "C:\Users\foxfo\.ssh\AutoStockBot.pem" ubuntu@3.25.119.99 "cd AutoStockBot && rm -f app/data/top_picks.json && git stash && git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart scalping_bot && sudo systemctl status scalping_bot"
 
 echo.
 echo ✅ Local Push & Remote Restart Successful!
