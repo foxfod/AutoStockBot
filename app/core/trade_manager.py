@@ -815,23 +815,12 @@ class TradeManager:
                             self.save_history()
                             
                             # Unsubscribe from WebSocket
-                            if kis.websocket:
-                                kis.websocket.unsubscribe_stock(symbol)
-                                logger.info(f"📡 WebSocket unsubscribed: {symbol}")
-                            
-                            del self.active_trades[symbol]
-                            self.update_balance()
-                        else:
-                            bot.send_message(f"⚠️ AI {analysis_type} 매도 실패 ({name}): {res.get('error')}")
-                    else:
-                        logger.info(f"✋ {name}: AI recommends HOLD. Continuing to monitor.")
-                        
+                
                 except Exception as e:
-                    logger.error(f"AI {analysis_type} Analysis Error ({name}): {e}")
-
+                    logger.error(f"Error in Risk Monitor ({name}): {e}")
 
     def clean_pending_orders(self):
-        # Only implemented for KR currently
+        """Clean up pending orders if needed"""
         orders = kis.get_orders() # Returns list of orders today
         if not orders: return
 
@@ -842,9 +831,91 @@ class TradeManager:
                 name = order['prdt_name']
                 logger.info(f"Checking Pending Order {ord_no} for {name} ({rem_qty} sh left)...")
 
+    def check_overnight_holds(self, market_filter="KR"):
+        """
+        Check active trades before market close to see if we should HOLD overnight.
+        Criteria: AI analysis returns "HOLD" (Gap-Up potential).
+        """
+        if not self.active_trades: return
+        
+        # Only check active trades that are NOT already marked overnight
+        candidates = [s for s, t in self.active_trades.items() 
+                      if t.get('market_type', 'KR') == market_filter and not t.get('overnight')]
+        
+        if not candidates: return
+
+        logger.info(f"🌙 Checking Overnight Potential for {market_filter}...")
+        bot.send_message(f"🌙 [{market_filter}] 오버나잇(Overnight) 심사 시작... ({len(candidates)} 종목)")
+        
+        for symbol in candidates:
+            trade = self.active_trades[symbol]
+            name = trade['name']
+            buy_price = trade['buy_price']
+            
+            # Get Current Price
+            try:
+                if market_filter == "US":
+                    excg = trade.get('excg', 'NAS')
+                    p_data = kis.get_overseas_price(symbol, excg)
+                    curr_price = float(p_data['last'])
+                else:
+                    p_data = kis.get_current_price(symbol)
+                    curr_price = float(p_data['stck_prpr'])
+            except:
+                logger.warning(f"Could not get price for {name}, skipping overnight check.")
+                continue
+
+            pnl_rate = ((curr_price - buy_price) / buy_price) * 100
+            
+            # Hard Stop: Do not hold deep losses (> -3%)
+            if pnl_rate <= -3.0:
+                logger.info(f"Skipping Overnight for {name}: Loss too deep ({pnl_rate:.2f}%)")
+                continue
+
+            # Get Data for AI
+            if market_filter == "US":
+                daily_data = kis.get_overseas_daily_price(symbol, trade.get('excg', 'NAS'))
+                news = kis.get_overseas_news_titles(symbol)
+            else:
+                daily_data = kis.get_daily_price(symbol)
+                news = kis.get_news_titles(symbol)
+
+            # Analyze Technicals
+            mapped_data = []
+            if daily_data:
+                for d in daily_data:
+                    mapped_data.append({
+                        "stck_bsop_date": d.get('xymd', d.get('stck_bsop_date')),
+                        "stck_clpr": d.get('clos', d.get('stck_clpr')),
+                        "stck_oprc": d.get('open', d.get('stck_oprc')),
+                        "stck_hgpr": d.get('high', d.get('stck_hgpr')),
+                        "stck_lwpr": d.get('low', d.get('stck_lwpr')),
+                        "acml_vol": d.get('tvol', d.get('acml_vol'))
+                    })
+            tech = technical.analyze(mapped_data)
+
+            # AI Call 
+            try:
+                loop = asyncio.get_event_loop()
+                decision = loop.run_until_complete(
+                    ai_analyzer.analyze_overnight_potential(symbol, curr_price, buy_price, tech, news)
+                )
+                
+                if decision.get('decision') == "HOLD":
+                    trade['overnight'] = True
+                    reason = decision.get('reason', 'AI Decision')
+                    logger.info(f"✅ Overnight Decision: HOLD {name} ({pnl_rate:.2f}%) - {reason}")
+                    bot.send_message(f"🛌 오버나잇 결정: **{name}** (수익률 {pnl_rate:.2f}%)\n이유: {reason}")
+                else:
+                     logger.info(f"❌ Overnight Decision: LIQUIDATE {name} - {decision.get('reason')}")
+                     
+            except Exception as e:
+                logger.error(f"Error in Overnight Check for {name}: {e}")
+
     def liquidate_all_positions(self, market_filter="ALL"):
         """
         Liquidate positions. market_filter: "ALL", "KR", "US"
+        Skip trades marked with 'overnight': True
         """
         logger.info(f"Liquidating {market_filter}...")
         
@@ -853,6 +924,13 @@ class TradeManager:
             holdings = kis.get_my_stock_balance()
             if holdings:
                 for stock in holdings:
+                    # Check if this stock is in active_trades and marked as overnight
+                    symbol = stock['pdno']
+                    if symbol in self.active_trades:
+                        if self.active_trades[symbol].get('overnight'):
+                            logger.info(f"🛌 Skipping Liquidation for {stock['prdt_name']} (Overnight Hold)")
+                            continue
+                            
                     qty = int(stock['hldg_qty'])
                     if qty > 0:
                         res = kis.sell_order(stock['pdno'], qty, 0)
@@ -867,6 +945,71 @@ class TradeManager:
                              logger.error(f"Final Liquidation failed for {stock['prdt_name']}: {res['error']}")
                         else:
                              bot.send_message(f"⏹️ 국장 청산 완료: {stock['prdt_name']}")
+                             if symbol in self.active_trades: del self.active_trades[symbol]
+
+        # 2. US Liquidation
+        if market_filter in ["ALL", "US"]:
+            # Step A: Cancel Outstanding Orders to Unlock Qty
+            try:
+                orders = kis.get_overseas_outstanding_orders()
+                if orders:
+                    logger.info(f"Found {len(orders)} outstanding US orders. Cancelling...")
+                    for o in orders:
+                        oid = o['odno']
+                        sym = o['pdno']
+                        excg = o.get('ovrs_excg_cd', 'NAS') # Default fallback
+                        
+                        logger.info(f"Cancelling Order {oid} for {sym} ({excg})")
+                        kis.cancel_overseas_order(oid, sym, excg)
+                    time.sleep(2)
+            except Exception as e:
+                logger.error(f"Failed to cancel US orders: {e}")
+
+            # Step B: Sell All Holdings
+            ovs_bal = kis.get_overseas_balance()
+            if ovs_bal and 'holdings' in ovs_bal:
+                for stock in ovs_bal['holdings']:
+                    symbol = stock['ovrs_pdno']
+                    
+                    # Check Overnight
+                    if symbol in self.active_trades:
+                        if self.active_trades[symbol].get('overnight'):
+                            logger.info(f"🛌 Skipping Liquidation for {stock['ovrs_item_name']} (Overnight Hold)")
+                            continue
+
+                    qty_str = stock.get('ovrs_ord_psbl_qty', '0')
+                    qty = int(float(qty_str))
+                    
+                    if qty == 0:
+                        qty = int(float(stock.get('ovrs_cblc_qty', '0')))
+                    
+                    if qty > 0:
+                        excg = stock['ovrs_excg_cd']
+                        name = stock['ovrs_item_name']
+                        
+                        current_price_data = kis.get_overseas_price(symbol, excg)
+                        limit_price = 0
+                        if current_price_data and 'last' in current_price_data:
+                            curr_price = float(current_price_data['last'])
+                            limit_price = curr_price * 0.95 
+                        else:
+                            bot.send_message(f"❌ 미장 청산 실패 ({name}): 실시간 시세 조회 불가")
+                            continue
+
+                        res = kis.sell_overseas_order(symbol, qty, price=limit_price, excg_cd=excg)
+                        
+                        if isinstance(res, dict) and "error" in res:
+                             logger.warn(f"US Liquidation failed for {name}: {res['error']}. Retrying...")
+                             time.sleep(1)
+                             res = kis.sell_overseas_order(symbol, qty, price=limit_price, excg_cd=excg)
+
+                        if isinstance(res, dict) and "error" in res:
+                             bot.send_message(f"❌ 미장 청산 실패 ({name}): {res['error']}")
+                             logger.error(f"Final US Liquidation failed for {name}: {res['error']}")
+                        else:
+                             bot.send_message(f"⏹️ 미장 청산 완료 (지정가 ${limit_price:.2f}): {name}")
+                             if symbol in self.active_trades: del self.active_trades[symbol]
+
 
         # 2. US Liquidation
         if market_filter in ["ALL", "US"]:

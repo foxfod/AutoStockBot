@@ -386,4 +386,64 @@ class AIAnalyzer:
             text = text[:-3]
         return text.strip()
 
+    async def analyze_overnight_potential(self, symbol: str, current_price: float, buy_price: float, tech_summary: dict, news_titles: list) -> dict:
+        """
+        Analyze if we should HOLD this stock overnight (Gap-Up Potential).
+        """
+        pnl = ((current_price - buy_price) / buy_price) * 100
+        news_text = json.dumps(news_titles, ensure_ascii=False) if news_titles else "No recent breaking news."
+        
+        prompt = f"""
+        You are a Swing Trading Expert.
+        We are considering holding '{symbol}' overnight instead of selling at market close.
+        
+        [Current Status]
+        - P&L: {pnl:.2f}%
+        - Current Price: {current_price}
+        
+        [Technical Context]
+        - Trend: {tech_summary.get('trend')}
+        - RSI: {tech_summary.get('rsi')}
+        - Daily Change: {tech_summary.get('daily_change', 0):.2f}%
+        
+        [News/Catalyst]
+        {news_text}
+        
+        Task:
+        Predict if this stock is likely to GAP UP tomorrow.
+        Conditions for HOLD:
+        1. Strong Upward Trend OR Clear Reversal Signal (e.g. Hammer at support).
+        2. Positive News Catalyst that is not fully priced in.
+        3. P&L is positive OR Loss is recoverable ( > -3%).
+        
+        If it looks weak or risky, signal LIQUIDATE.
+        
+        Return JSON ONLY:
+        {{
+            "decision": "HOLD" or "LIQUIDATE",
+            "reason": "Brief explanation in Korean (Hangul)"
+        }}
+        """
+        
+        # 1. GPT
+        try:
+            res = await self.openai_client.chat.completions.create(
+                model=self.gpt_model,
+                messages=[{"role": "system", "content": "Swing Trader Mode."}, {"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            return json.loads(self._clean_json_text(res.choices[0].message.content))
+        except Exception as e:
+            logger.error(f"GPT Overnight Analysis Failed: {e}. Switching to Gemini...")
+            
+        # 2. Gemini
+        if self.gemini_model:
+            try:
+                res = await self.gemini_model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
+                return json.loads(self._clean_json_text(res.text))
+            except Exception as e:
+                logger.error(f"Gemini Overnight Analysis Failed: {e}")
+                
+        return {"decision": "LIQUIDATE", "reason": "AI Error (Safety Liquidate)"}
+
 ai_analyzer = AIAnalyzer()

@@ -74,7 +74,9 @@ state = {
     "kr_market_closed": False, # Circuit Breaker for KR
     "us_market_closed": False,  # Circuit Breaker for US
     "kr_pre_market_done": False,
-    "us_pre_market_done": False
+    "us_pre_market_done": False,
+    "kr_overnight_checked": False,
+    "us_overnight_checked": False
 }
 server_context["log_queue"] = log_queue
 server_context["bot_state"] = state
@@ -146,6 +148,7 @@ async def trading_loop():
                     state['us_report_sent'] = False
                     state['us_market_closed'] = False # Reset US Breaker
                     state['us_pre_market_done'] = False # Reset
+                    state['us_overnight_checked'] = False # Reset
 
                 # Check Market Open (Weekend/Holiday)
                 is_open, reason = check_market_open("KR")
@@ -196,6 +199,12 @@ async def trading_loop():
                          trade_manager.monitor_risks("KR")
                          state['last_risk_check_time'] = now
 
+                    # Overnight Check (15:10 ~ 15:15)
+                    # Check 5 mins before liquidation start
+                    if is_time_in_range(dtime(15, 10), KR_LIQUIDATION, t) and not state.get('kr_overnight_checked'):
+                         trade_manager.check_overnight_holds("KR")
+                         state['kr_overnight_checked'] = True
+
                 # 3. Liquidation (Retry Logic)
                 # Tried at 15:15. If failing, retry every 2 mins until 15:30.
                 if t >= KR_LIQUIDATION:
@@ -242,7 +251,9 @@ async def trading_loop():
                     state['kr_liquidation_done'] = False
                     state['kr_report_sent'] = False
                     state['kr_market_closed'] = False # Reset KR Breaker
+                    state['kr_market_closed'] = False # Reset KR Breaker
                     state['kr_pre_market_done'] = False # Reset
+                    state['kr_overnight_checked'] = False # Reset
 
                 # Check Market Open (Weekend/Holiday)
                 is_open, reason = check_market_open("US")
@@ -288,6 +299,11 @@ async def trading_loop():
                     if risk_time_since >= 10:
                          trade_manager.monitor_risks("US")
                          state['last_risk_check_time'] = now
+
+                    # Overnight Check (05:35 ~ 05:40)
+                    if is_time_in_range(dtime(5, 35), US_LIQUIDATION, t) and not state.get('us_overnight_checked'):
+                         trade_manager.check_overnight_holds("US")
+                         state['us_overnight_checked'] = True
                 
                 # 3. Liquidation (Retry Logic)
                 # Tried at 05:40. If failing, retry every 2 mins until 06:00.

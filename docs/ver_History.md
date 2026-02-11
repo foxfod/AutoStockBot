@@ -137,3 +137,14 @@
 
 ### [20260211_010-10] 종목분석 오류 수정
 - dashboard
+
+### [v.20260211_011-00] 오버나잇 전략(Overnight Hold Strategy) 구현
+- **기능 추가**:
+    - `ai_analyzer.py`: 장 마감 전 상승 추세 및 뉴스 호재 분석을 통한 오버나잇(HOLD) 판단 로직 추가 (`analyze_overnight_potential`).
+    - `trade_manager.py`: 청산(Liquidation) 프로세스에서 오버나잇 승인 종목 제외 처리 (`check_overnight_holds`, `liquidate_all_positions`).
+    - `main_auto_trade.py`: KR(15:10), US(05:35) 장 마감 직전 오버나잇 심사 스케줄링 추가.
+- **정책**:
+    - AI 판단 시 수익 중이거나 손실이 -3% 이내인 경우만 오버나잇 허용 (깊은 손실은 리스크 관리 차원에서 청산).
+
+### [20260211_011-01] 판매 규칙 보강
+- 장마감 규칙 - HOLD 추가
