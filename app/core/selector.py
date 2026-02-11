@@ -181,7 +181,8 @@ class Selector:
             if tech['rsi'] >= 70: return None # Stricter RSI (was 75)
             if tech.get('daily_change', 0) >= 15.0: return None # Avoid chasing spikes (>15%)
             if tech['trend'] == "DOWN": return None
-            if tech['sma_5'] <= tech['sma_20']: return None
+            # Relaxed SMA5 < SMA20 filter to allow breakouts
+            # if tech['sma_5'] <= tech['sma_20']: return None
             
             # 2. Get News (Blocking) - Only if passed tech
             news = []
@@ -631,28 +632,27 @@ class Selector:
                 continue
             
             # 3. Filters
-            if tech_summary['sma_5'] <= tech_summary['sma_20']:
-                continue
-            if tech_summary['rsi'] >= 70: # Stricter RSI
+            # Relaxed: Removed lagging SMA5 < SMA20 filter to catch breakouts (like NET)
+            # if tech_summary['sma_5'] <= tech_summary['sma_20']:
+            #     logger.info(f"Skipping {name}: Weak Trend (SMA5 < SMA20)")
+            #     continue
+
+            if tech_summary['rsi'] >= 75: # Relaxed RSI from 70 to 75
+                logger.info(f"Skipping {name}: High RSI ({tech_summary['rsi']:.1f})")
                 continue
             
             # Calculate daily change for US if not already in tech_summary
-            # (tech_summary usually has 'daily_change' if computed in analyze or earlier)
-            # Let's check if we computed it. 
-            # In select_us_stocks, we computed mapped_data but didn't explicitly add daily_change to tech_summary object yet? 
-            # technical.analyze might not add it. 
-            # Let's calculate it here for safety or rely on pre-calculation if added.
-            # Actually, let's just use the Price we have.
-            
             daily_change = 0.0
             if len(daily_data) >= 2:
                  curr = float(daily_data[0]['clos'])
                  prev = float(daily_data[1]['clos'])
                  if prev > 0: daily_change = ((curr - prev) / prev) * 100
             
-            if daily_change >= 15.0: # Avoid chasing US spikes too
+            if daily_change >= 20.0: # Relaxed from 15% to 20%
+                logger.info(f"Skipping {name}: Too Volatile (+{daily_change:.1f}%)")
                 continue
             if tech_summary['trend'] == "DOWN":
+               logger.info(f"Skipping {name}: Down Trend")
                continue 
                
             # 4. Prepare Job

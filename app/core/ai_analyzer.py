@@ -85,7 +85,7 @@ class AIAnalyzer:
         1. Evaluate if this is a HIGH PROBABILITY buy opportunity. Be CONSERVATIVE.
         2. **CRITICAL**: IF Daily Change > 15%, REJECT (Score < 50) due to "Chasing Highs".
         3. IF RSI is > 70, penalize score significantly (Risk of top).
-        4. IF SMA5 < SMA20, Reject (Score < 50).
+        4. IF SMA5 < SMA20, Penalize Score UNLESS looking for "Dip Buy" or "Reversal".
         5. Look for "Pullback" or "Early Uptrend" patterns. Avoid "Vertical Spikes".
         6. IF News is old or irrelevant, do not boost score.
         
@@ -187,11 +187,13 @@ class AIAnalyzer:
            - IF Market is "BEAR" or "Down": Be VERY CONSERVATIVE. Require strong news catalyst. Score < 70 if no news.
            - IF Market is "BULL" or "Up": Focus on momentum.
         3. Daily Change Penalties:
-           - IF > 15%: REJECT (Too high risk of reversal). Score MUST be < 60.
-           - IF > 10%: Apply CAUTION.
-        4. Penalize if RSI > 70 or Trend is Down.
+           - IF > 20%: REJECT (Too high risk of reversal). Score MUST be < 60.
+           - IF > 15%: Apply CAUTION.
+        4. IF SMA5 < SMA20:
+           - Generally bearish, BUT allow "Dip Buying" if RSI < 40 or Reversal Pattern detected.
+           - If no reversal signal, Penalize Score.
         5. Favor "Dip Buying" (Pullback by -1~-3% after breakout) over "Market Order at High".
-        5. "reason" MUST be in Korean (Hangul).
+        6. "reason" MUST be in Korean (Hangul).
         """
         
         # Call GPT (Primary) -> Gemini (Fallback)
