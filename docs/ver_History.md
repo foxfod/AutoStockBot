@@ -111,3 +111,9 @@
 
 ### [20260211_010-03] 긴급수정
 - `main_auto_trade.py`: `SCAN_INTERVAL` 변수 정의 누락으로 인한 NameError 수정 (긴급 복구)
+
+### [20260211_010-04] AI 분석 오류 수정
+- `ai_analyzer.py`: AI 응답 파싱 전처리 로직 추가 (Markdown 코드 블록 제거) - 분석 실패 해결
+
+### [20260211_010-05] AI 분석
+- `main_auto_trade.py`: `SCAN_INTERVAL` 변수 정의 누락으로 인한 NameError 수정 (긴급 복구)

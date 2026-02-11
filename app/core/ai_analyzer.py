@@ -43,7 +43,7 @@ class AIAnalyzer:
                     prompt,
                     generation_config={"response_mime_type": "application/json"}
                 )
-                return json.loads(response.text)
+                return json.loads(self._clean_json_text(response.text))
             except Exception as e:
                 logger.error(f"Gemini Analysis Failed: {e}")
         
@@ -60,7 +60,7 @@ class AIAnalyzer:
             response_format={"type": "json_object"}
         )
         content = response.choices[0].message.content
-        return json.loads(content)
+        return json.loads(self._clean_json_text(content))
 
     def _create_prompt(self, stock_name: str, news_list: list[str], tech_summary: dict) -> str:
         if not news_list:
@@ -142,7 +142,7 @@ class AIAnalyzer:
                 messages=[{"role": "system", "content": "Risk Manager Mode."}, {"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
-            return json.loads(res.choices[0].message.content)
+            return json.loads(self._clean_json_text(res.choices[0].message.content))
         except Exception as e:
             logger.error(f"GPT Risk Analysis Failed: {e}. Switching to Gemini...")
             
@@ -150,7 +150,7 @@ class AIAnalyzer:
         if self.gemini_model:
             try:
                 res = await self.gemini_model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
-                return json.loads(res.text)
+                return json.loads(self._clean_json_text(res.text))
             except Exception as e:
                 logger.error(f"Gemini Risk Analysis Failed: {e}")
                 
@@ -227,7 +227,7 @@ class AIAnalyzer:
                 return {}
 
         try:
-            parsed = json.loads(response_text)
+            parsed = json.loads(self._clean_json_text(response_text))
             
             # Normalize Result to Dict { 'SYMBOL': { ... } }
             results = {}
@@ -311,5 +311,16 @@ class AIAnalyzer:
                 return "AI 분석 서비스 일시적 오류. 잠시 후 다시 시도해주세요."
         
         return "AI 모델을 사용할 수 없습니다."
+
+    def _clean_json_text(self, text: str) -> str:
+        if not text: return "{}"
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
 
 ai_analyzer = AIAnalyzer()
