@@ -72,9 +72,7 @@ class Selector:
                 {"symbol": "COIN", "excg": "NASD", "name": "Coinbase"},
                 {"symbol": "MARA", "excg": "NASD", "name": "Marathon Digital"},
                 {"symbol": "NET", "excg": "NYSE", "name": "Cloudflare"},
-                {"symbol": "IONQ", "excg": "NYSE", "name": "IonQ"},
-                {"symbol": "SOXL", "excg": "NYSE", "name": "Direxion Daily Semi Bull 3X"},
-                {"symbol": "TQQQ", "excg": "NASD", "name": "ProShares UltraPro QQQ"}
+                {"symbol": "IONQ", "excg": "NYSE", "name": "IonQ"}
              ]
              
         # 2. Analyze Candidates (Parallel Batch Processing)
@@ -580,7 +578,6 @@ class Selector:
             {"symbol": "DAL", "excg": "NYSE", "name": "Delta"},
             {"symbol": "CCL", "excg": "NYSE", "name": "Carnival"},
             {"symbol": "NCLH", "excg": "NYSE", "name": "Norwegian Cruise"},
-            {"symbol": "ARKK", "excg": "NYSE", "name": "ARK Innovation"},
             {"symbol": "ZM", "excg": "NASD", "name": "Zoom"},
             {"symbol": "DOCU", "excg": "NASD", "name": "DocuSign"},
             {"symbol": "U", "excg": "NYSE", "name": "Unity Software"},
@@ -652,8 +649,12 @@ class Selector:
                 logger.info(f"Skipping {name}: Too Volatile (+{daily_change:.1f}%)")
                 continue
             if tech_summary['trend'] == "DOWN":
-               logger.info(f"Skipping {name}: Down Trend")
-               continue 
+               # Relaxed: Allow DOWN trend if RSI is low (Dip Buying opportunity)
+               if tech_summary['rsi'] < 50:
+                   logger.info(f"{name}: Down Trend but RSI {tech_summary['rsi']:.1f} < 50. Allowing as Dip Candidate.")
+               else:
+                   logger.info(f"Skipping {name}: Down Trend & RSI {tech_summary['rsi']:.1f} >= 50")
+                   continue 
                
             # 4. Prepare Job
             analysis_jobs.append({
