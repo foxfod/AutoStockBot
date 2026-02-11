@@ -167,39 +167,46 @@ async def analyze_trade(symbol: str, user=Depends(login_required)):
     from app.core.kis_api import kis
     from app.core.ai_analyzer import ai_analyzer
     
+    # 1. Fetch Real-time Data
+    step = "Init"
+    tech_summary = {}
+    news_list = []
+    
     try:
-        # Get Price History for Technicals
+        # Step 1: Price Data
+        step = "Price Data"
         if market_type == 'US':
              raw_data = kis.get_overseas_daily_price(symbol, excg_cd=excg)
-             # Map keys for US data
              daily_candles = []
-             for d in raw_data:
-                 daily_candles.append({
-                     "stck_bsop_date": d['xymd'],
-                     "stck_clpr": d['clos'],
-                     "stck_oprc": d['open'],
-                     "stck_hgpr": d['high'],
-                     "stck_lwpr": d['low'],
-                     "acml_vol": d['tvol']
-                 })
+             if raw_data:
+                 for d in raw_data:
+                     daily_candles.append({
+                         "stck_bsop_date": d['xymd'],
+                         "stck_clpr": d['clos'],
+                         "stck_oprc": d['open'],
+                         "stck_hgpr": d['high'],
+                         "stck_lwpr": d['low'],
+                         "acml_vol": d['tvol']
+                     })
         else:
              daily_candles = kis.get_daily_price(symbol)
 
         if not daily_candles:
-             return {"result": "데이터 부족으로 분석 불가"}
+             return {"result": f"❌ 데이터 부족 ({step}) - KIS API 응답 없음"}
              
-        # Calculate Technicals
+        # Step 2: Technical Analysis
+        step = "Technical Analysis"
         tech_summary = technical.analyze(daily_candles)
+        if "status" in tech_summary and tech_summary["status"] != "Success": 
+            # If technical analysis returned error status, but check if it returned a dict at all
+             if "close" not in tech_summary:
+                return {"result": f"❌ 기술적 분석 실패: {tech_summary.get('status')}"}
         
-        # Get News
-        news_list = []
+        # Step 3: News
+        step = "News Fetching"
         if market_type == 'US':
             raw_news = kis.get_overseas_news_titles(symbol)
             if raw_news:
-                # Adjust based on actual KIS return structure for overseas news
-                # Assuming list of dicts with 'title' or similar
-                # If raw_news is just titles? Check kis_api.
-                # Let's assume generic safety
                 for n in raw_news:
                     if isinstance(n, dict):
                         news_list.append(n.get('title', n.get('hts_pbnt_titl_cntt', '')))
@@ -213,18 +220,16 @@ async def analyze_trade(symbol: str, user=Depends(login_required)):
                     news_list.append(n.get('hts_pbnt_titl_cntt', ''))
                 news_list = news_list[:3]
         
-        # 4. Construct Report
-        # Basic Info
+        # Step 4: Construct Report
+        step = "Report Generation"
         report = f"### 🔍 {symbol} ({market_type})\n"
         report += f"- 분석 시각: {time.strftime('%H:%M:%S')}\n\n"
         
-        # Technicals
         report += "#### 📈 기술적 지표\n"
-        report += f"- 현재가: {tech_summary.get('close')}\n"
-        report += f"- 추세: {tech_summary.get('trend')}\n"
-        report += f"- RSI: {tech_summary.get('rsi')}\n\n"
+        report += f"- 현재가: {tech_summary.get('close', 'N/A')}\n"
+        report += f"- 추세: {tech_summary.get('trend', 'N/A')}\n"
+        report += f"- RSI: {tech_summary.get('rsi', 'N/A')}\n\n"
         
-        # News
         report += "#### 📰 관련 뉴스\n"
         if news_list:
             for n in news_list:
@@ -233,31 +238,33 @@ async def analyze_trade(symbol: str, user=Depends(login_required)):
             report += "- 관련 뉴스 없음\n"
         report += "\n"
         
-        # AI Analysis
         report += "#### 🤖 AI 종합 의견\n"
         
-        # Call AI Analyzer (Correct Signature)
-        # analyze_stock(stock_name, news_list, tech_summary) -> dict
-        ai_result = await ai_analyzer.analyze_stock(symbol, news_list, tech_summary)
-        
-        score = ai_result.get('score', 0)
-        reason = ai_result.get('reason', '분석 불가')
-        action = ai_result.get('action', 'N/A')
-        
-        report += f"- **점수**: {score}점 ({action})\n"
-        report += f"- **판단**: {reason}\n"
-        
-        # Strategy
-        strategy = ai_result.get('strategy', {})
-        if strategy:
-            report += f"- **전략**: 목표 {strategy.get('target_price')}% / 손절 {strategy.get('stop_loss')}%\n"
+        # Step 5: AI Analysis
+        step = "AI Analysis"
+        # Check if we have enough data for AI
+        if not tech_summary.get('close'):
+            report += "- ⚠️ 기술적 데이터 부족으로 AI 분석 스킵.\n"
+        else:
+            ai_result = await ai_analyzer.analyze_stock(symbol, news_list, tech_summary)
+            
+            score = ai_result.get('score', 0)
+            reason = ai_result.get('reason', '분석 불가')
+            action = ai_result.get('action', 'N/A')
+            
+            report += f"- **점수**: {score}점 ({action})\n"
+            report += f"- **판단**: {reason}\n"
+            
+            strategy = ai_result.get('strategy', {})
+            if strategy:
+                report += f"- **전략**: 목표 {strategy.get('target_price')}% / 손절 {strategy.get('stop_loss')}%\n"
             
         return {"result": report}
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"result": f"❌ 시스템 오류 발생 ({step})\n- {str(e)}"}
 
 # --- Top 10 Picks API ---
 class TopPicksRequest(BaseModel):
