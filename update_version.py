@@ -88,11 +88,20 @@ def main():
     try:
         # Use simple input for now. If running via bat, might need arguments.
         # But bat calls python directly in console, so input works.
+        import sys
+        if sys.platform == "win32":
+            sys.stdin.reconfigure(encoding='utf-8')
+            sys.stdout.reconfigure(encoding='utf-8')
+
         print("\n[한글 입력 가능]")
         title = input("변경 사항 제목 (Title): ").strip()
         if not title: title = "자동 업데이트"
         
-        details = input("상세 내용 (세미콜론 ; 으로 구분): ").strip()
+        details = ""
+        while not details:
+            details = input("상세 내용 (세미콜론 ; 으로 구분): ").strip()
+            if not details:
+                print("⚠️ 상세 내용은 필수입니다.")
         
         # Update Files
         update_version_file(new_ver)

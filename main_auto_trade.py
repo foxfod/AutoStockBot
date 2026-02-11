@@ -60,6 +60,7 @@ US_TRADE_START = dtime(22, 30) # Pre-market / Early
 US_LIQUIDATION = dtime(5, 40)  # 05:40 AM KST (Before US Close 06:00)
 US_CLOSE = dtime(6, 0)
 
+SCAN_INTERVAL = 10 # 10 Minutes
 MAX_TRADES = 3
 from app.core.version import VERSION
 
