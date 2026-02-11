@@ -478,6 +478,7 @@ class Selector:
         """
         import asyncio
         from app.core.market_analyst import market_analyst
+        from app.core.telegram_bot import bot
 
         start_time = time.time()
         
@@ -599,71 +600,70 @@ class Selector:
             
             await asyncio.sleep(0.1)
             
-            # 1. Get Daily Data
-            daily_data = kis.get_overseas_daily_price(symbol, excg)
-            if not daily_data:
-                logger.warning(f"No Daily Data for {name} ({excg})")
-                continue
+            try:
+                # 1. Get Daily Data
+                daily_data = kis.get_overseas_daily_price(symbol, excg)
+                if not daily_data:
+                    logger.warning(f"No Daily Data for {name} ({excg})")
+                    continue
+                    
+                current_price = float(daily_data[0]['clos'])
+                safe_budget = budget if budget else 0
                 
-            current_price = float(daily_data[0]['clos'])
-            safe_budget = budget if budget else 0
-            
-            if budget is not None and current_price > safe_budget:
-                logger.info(f"Skipping {name}: Price {current_price} > Budget {safe_budget:.1f} (Too Expensive)")
-                continue
+                if budget is not None and current_price > safe_budget:
+                    logger.info(f"Skipping {name}: Price {current_price} > Budget {safe_budget:.1f} (Too Expensive)")
+                    continue
+                    
+                mapped_data = []
+                for d in daily_data:
+                    mapped_data.append({
+                        "stck_bsop_date": d['xymd'],
+                        "stck_clpr": d['clos'],
+                        "stck_oprc": d['open'],
+                        "stck_hgpr": d['high'],
+                        "stck_lwpr": d['low'],
+                        "acml_vol": d['tvol']
+                    })
                 
-            mapped_data = []
-            for d in daily_data:
-                mapped_data.append({
-                    "stck_bsop_date": d['xymd'],
-                    "stck_clpr": d['clos'],
-                    "stck_oprc": d['open'],
-                    "stck_hgpr": d['high'],
-                    "stck_lwpr": d['low'],
-                    "acml_vol": d['tvol']
+                # 2. Tech Analysis
+                tech_summary = technical.analyze(mapped_data)
+                if tech_summary.get("status") in ["Error", "Not enough data"]:
+                    continue
+                
+                # 3. Filters
+                if tech_summary['rsi'] >= 75: # Relaxed RSI from 70 to 75
+                    logger.info(f"Skipping {name}: High RSI ({tech_summary['rsi']:.1f})")
+                    continue
+                
+                # Calculate daily change for US if not already in tech_summary
+                daily_change = 0.0
+                if len(daily_data) >= 2:
+                     curr = float(daily_data[0]['clos'])
+                     prev = float(daily_data[1]['clos'])
+                     if prev > 0: daily_change = ((curr - prev) / prev) * 100
+                
+                if daily_change >= 20.0: # Relaxed from 15% to 20%
+                    logger.info(f"Skipping {name}: Too Volatile (+{daily_change:.1f}%)")
+                    continue
+                if tech_summary['trend'] == "DOWN":
+                   # Relaxed: Allow DOWN trend if RSI is low (Dip Buying opportunity)
+                   if tech_summary['rsi'] < 50:
+                       logger.info(f"{name}: Down Trend but RSI {tech_summary['rsi']:.1f} < 50. Allowing as Dip Candidate.")
+                   else:
+                       logger.info(f"Skipping {name}: Down Trend & RSI {tech_summary['rsi']:.1f} >= 50")
+                       continue 
+                   
+                # 4. Prepare Job
+                analysis_jobs.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "excg": excg,
+                    "tech_summary": tech_summary,
+                    "news_titles": [] 
                 })
-            
-            # 2. Tech Analysis
-            tech_summary = technical.analyze(mapped_data)
-            if tech_summary.get("status") in ["Error", "Not enough data"]:
+            except Exception as e:
+                logger.error(f"Error processing {name} in US selection: {e}")
                 continue
-            
-            # 3. Filters
-            # Relaxed: Removed lagging SMA5 < SMA20 filter to catch breakouts (like NET)
-            # if tech_summary['sma_5'] <= tech_summary['sma_20']:
-            #     logger.info(f"Skipping {name}: Weak Trend (SMA5 < SMA20)")
-            #     continue
-
-            if tech_summary['rsi'] >= 75: # Relaxed RSI from 70 to 75
-                logger.info(f"Skipping {name}: High RSI ({tech_summary['rsi']:.1f})")
-                continue
-            
-            # Calculate daily change for US if not already in tech_summary
-            daily_change = 0.0
-            if len(daily_data) >= 2:
-                 curr = float(daily_data[0]['clos'])
-                 prev = float(daily_data[1]['clos'])
-                 if prev > 0: daily_change = ((curr - prev) / prev) * 100
-            
-            if daily_change >= 20.0: # Relaxed from 15% to 20%
-                logger.info(f"Skipping {name}: Too Volatile (+{daily_change:.1f}%)")
-                continue
-            if tech_summary['trend'] == "DOWN":
-               # Relaxed: Allow DOWN trend if RSI is low (Dip Buying opportunity)
-               if tech_summary['rsi'] < 50:
-                   logger.info(f"{name}: Down Trend but RSI {tech_summary['rsi']:.1f} < 50. Allowing as Dip Candidate.")
-               else:
-                   logger.info(f"Skipping {name}: Down Trend & RSI {tech_summary['rsi']:.1f} >= 50")
-                   continue 
-               
-            # 4. Prepare Job
-            analysis_jobs.append({
-                "symbol": symbol,
-                "name": name,
-                "excg": excg,
-                "tech_summary": tech_summary,
-                "news_titles": [] 
-            })
             
         logger.info(f"US Data collected for {len(analysis_jobs)} stocks. Analyzing...")
 
