@@ -632,7 +632,8 @@ class Selector:
                         "action": ai_result.get('action', 'Watch'),
                         "target": strategy.get('target_price'),
                         "stop_loss": strategy.get('stop_loss'),
-                        "rsi": job['tech_summary']['rsi']
+                        "rsi": job['tech_summary']['rsi'],
+                        "market": "KR" 
                     })
                     logger.info(f"Selected: {name} ({score})")
                     report_lines.append(f"✅ {name}: {score}점 (선정됨)")
@@ -877,7 +878,7 @@ class Selector:
                         "name": job['name'],
                         "score": res['score'],
                         "reason": res['reason'],
-                        "market": market_type,
+                        "market": "US",
                         "price": job['tech_summary']['close'],
                         "change": job['tech_summary']['daily_change']
                     })
@@ -895,7 +896,7 @@ class Selector:
             with open(TOP_PICKS_FILE, "w", encoding='utf-8') as f:
                 json.dump({
                     "date": today_str,
-                    "market": market_type,
+                    "market": "US",
                     "picks": top_10
                 }, f, ensure_ascii=False, indent=2)
         except Exception as e:
@@ -903,7 +904,7 @@ class Selector:
             
         # 5. Report
         if top_10:
-            msg = f"🌟 [{market_type}] 오늘의 Hot Trend Top 10 (AI 선정)\n"
+            msg = f"🌟 [US] 오늘의 Hot Trend Top 10 (AI 선정)\n"
             for i, s in enumerate(top_10, 1):
                 msg += f"{i}. {s['name']} ({s['score']}점)\n   └ {s['reason']}\n"
             bot.send_message(msg)
