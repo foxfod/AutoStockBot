@@ -416,13 +416,19 @@ class TradeManager:
             logger.info(f"Buying {market_type}: {name} ({qty}sh) @ {current_price}")
             
             if market_type == "US":
+                # Ensure 4-char code for Order API (Documentation Requirement)
+                if excg == 'NAS': excg = 'NASD'
+                elif excg == 'NYS': excg = 'NYSE'
+                elif excg == 'AMS': excg = 'AMEX'
+
                 # Limit Order for US (Current + 1% buffer)
                 res = kis.buy_overseas_order(symbol, qty, price=current_price*1.01, excg_cd=excg) 
                 
                 # Retry Logic for Exchange Code Mismatch (APBK0656)
                 if isinstance(res, dict) and (res.get('msg_cd') == 'APBK0656' or '해당종목' in res.get('msg1', '')):
                     logger.warning(f"Order failed for {symbol} ({excg}). Retrying with other exchanges...")
-                    for alt_excg in ['NAS', 'NYS', 'AMS', 'NASD', 'NYSE', 'AMEX']:
+                    # Priority: 4-char (Correct) -> 3-char (Legacy/Fallback)
+                    for alt_excg in ['NASD', 'NYSE', 'AMEX', 'NAS', 'NYS', 'AMS']:
                         if alt_excg == excg: continue
                         
                         logger.info(f"Retrying {symbol} on {alt_excg}...")
