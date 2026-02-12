@@ -402,6 +402,15 @@
                     renderMarketInfo(data.market_info);
                 }
 
+                // 5. Slots
+                if (data.manual_slots) {
+                    // Only re-render if changed to avoid flickering (simple check)
+                    // But manualSlots is simple object.
+                    manualSlots = data.manual_slots;
+                    renderSlots('KR');
+                    renderSlots('US');
+                }
+
             } catch (e) {
                 console.error("State fetch error", e);
             }
@@ -601,14 +610,31 @@
         setInterval(updateSwitchUI, 5000); // Polling every 5s for sync
         document.addEventListener('DOMContentLoaded', updateSwitchUI);
 
+        // Initialize manualSlots with defaults to prevent errors before first fetch
+        // manualSlots is already defined at top as {}
+
+        function renderSlots(market) {
+            const count = manualSlots[market] || 3;
+            const container = document.getElementById(`${market.toLowerCase()}-slots-container`);
+            if (!container) return;
+
+            container.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const div = document.createElement('div');
+                div.className = `h-full w-4 rounded-sm ${market === 'KR' ? 'bg-yellow-500' : 'bg-blue-500'} opacity-80 shadow-sm`;
+                container.appendChild(div);
+            }
+        }
+
         async function updateSlots(market, change) {
             // Optimistic Update
             let current = (manualSlots[market] || 3);
             let next = current + change;
             if (next < 1 || next > 10) return;
-            manualSlots[market] = next; // Immediate visual feedback
 
-            // ... existing slot code ...
+            manualSlots[market] = next; // Immediate visual feedback
+            renderSlots(market);
+
             try {
                 await fetch('/api/config/slots', {
                     method: 'POST',
@@ -617,6 +643,7 @@
                 });
             } catch (e) {
                 console.error("Slot update failed", e);
+                // Revert on failure? For now, just log.
             }
         }
 
