@@ -280,7 +280,7 @@ async def get_top_picks(market: str = "KR", user=Depends(login_required)):
     Optionally filter by market (check if the file matches the requested market).
     """
     try:
-        file_path = "app/data/top_picks.json"
+        file_path = f"app/data/top_picks_{market}.json"
         if not os.path.exists(file_path):
             return {}
             

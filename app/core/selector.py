@@ -23,7 +23,7 @@ class Selector:
         from app.core.market_analyst import market_analyst
         from app.core.telegram_bot import bot
 
-        TOP_PICKS_FILE = "app/data/top_picks.json"
+        TOP_PICKS_FILE = f"app/data/top_picks_{market_type}.json"
         
         # Check if already done today
         today_str = datetime.now().strftime("%Y-%m-%d")
@@ -407,7 +407,7 @@ class Selector:
         import json
         import os
         from datetime import datetime
-        TOP_PICKS_FILE = "app/data/top_picks.json"
+        TOP_PICKS_FILE = "app/data/top_picks_KR.json"
         pre_market_picks = []
         
         try:
@@ -676,7 +676,7 @@ class Selector:
         import json
         import os
         from datetime import datetime
-        TOP_PICKS_FILE = "app/data/top_picks.json"
+        TOP_PICKS_FILE = "app/data/top_picks_US.json"
         pre_market_picks = []
         
         try:
