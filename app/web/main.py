@@ -148,6 +148,26 @@ async def update_trade(symbol: str, update: TradeUpdate, user=Depends(login_requ
     tm = server_context["trade_manager"]
     if not tm:
          raise HTTPException(status_code=503, detail="TradeManager not ready")
+
+# --- Trading Switches API ---
+class MarketStatusUpdate(BaseModel):
+    market: str  # KR or US
+    state: bool  # True(ON) or False(OFF)
+
+@app.get("/api/settings/status")
+async def get_market_status(user=Depends(login_required)):
+    tm = server_context["trade_manager"]
+    if not tm: return {"KR": True, "US": True}
+    return tm.market_status
+
+@app.post("/api/settings/toggle")
+async def toggle_market_status(update: MarketStatusUpdate, user=Depends(login_required)):
+    tm = server_context["trade_manager"]
+    if not tm:
+         raise HTTPException(status_code=503, detail="TradeManager not ready")
+    
+    tm.set_market_status(update.market, update.state)
+    return {"status": "success", "market": update.market, "state": update.state}
     
     success = tm.update_trade_settings(symbol, update.target_price, update.stop_loss_price)
     if not success:

@@ -84,6 +84,27 @@
             </button>
         </div>
 
+        <!-- Trading Switches -->
+        <div class="flex items-center space-x-4 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 shadow-inner">
+            <!-- KR Switch -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-gray-300">🇰🇷 KR</span>
+                <button id="switch-kr" onclick="toggleMarket('KR')"
+                    class="w-10 h-5 bg-gray-600 rounded-full relative transition-colors focus:outline-none">
+                    <div class="w-3 h-3 bg-white rounded-full absolute top-1 left-1 transition-transform"></div>
+                </button>
+            </div>
+            <div class="w-px h-4 bg-gray-700"></div>
+            <!-- US Switch -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-gray-300">🇺🇸 US</span>
+                <button id="switch-us" onclick="toggleMarket('US')"
+                    class="w-10 h-5 bg-gray-600 rounded-full relative transition-colors focus:outline-none">
+                    <div class="w-3 h-3 bg-white rounded-full absolute top-1 left-1 transition-transform"></div>
+                </button>
+            </div>
+        </div>
+
         <!-- Connection Status -->
         <div class="flex items-center space-x-4">
             <div class="flex items-center gap-2">
@@ -524,6 +545,62 @@
             await fetch(`/api/control/${isPaused ? 'resume' : 'pause'}`, { method: 'POST' });
         }
 
+        // Trading Switches Logic
+        async function updateSwitchUI() {
+            try {
+                const res = await fetch('/api/settings/status');
+                const status = await res.json();
+
+                ['KR', 'US'].forEach(market => {
+                    const btn = document.getElementById(`switch-${market.toLowerCase()}`);
+                    const knob = btn.firstElementChild;
+                    const isActive = status[market];
+
+                    if (isActive) {
+                        btn.className = "w-10 h-5 bg-green-500 rounded-full relative transition-colors focus:outline-none";
+                        knob.className = "w-3 h-3 bg-white rounded-full absolute top-1 translate-x-6 transition-transform"; // right
+                    } else {
+                        btn.className = "w-10 h-5 bg-gray-600 rounded-full relative transition-colors focus:outline-none";
+                        knob.className = "w-3 h-3 bg-white rounded-full absolute top-1 translate-x-1 transition-transform"; // left
+                    }
+                });
+            } catch (e) {
+                console.error("Failed to fetch switch status", e);
+            }
+        }
+
+        async function toggleMarket(market) {
+            // Optimistic Toggle logic not easy without current state, just fetch after server response.
+            // But to be smooth, we should know current state.
+            // Let's rely on server toggle endpoint (we implemented set status, not toggle, but UI is toggle).
+            // Actually we need to know current state to toggle.
+            // The endpoint expects {market, state}.
+
+            // 1. Get current state from UI class (hacky but works)
+            const btn = document.getElementById(`switch-${market.toLowerCase()}`);
+            const isCurrentlyOn = btn.className.includes('bg-green-500');
+            const newState = !isCurrentlyOn;
+
+            try {
+                const res = await fetch('/api/settings/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ market: market, state: newState })
+                });
+
+                if (res.ok) {
+                    // Update UI immediately
+                    updateSwitchUI();
+                } else {
+                    alert("스위치 변경 실패");
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        // Call this periodically or on load
+        setInterval(updateSwitchUI, 5000); // Polling every 5s for sync
+        document.addEventListener('DOMContentLoaded', updateSwitchUI);
+
         async function updateSlots(market, change) {
             // Optimistic Update
             let current = (manualSlots[market] || 3);
@@ -531,6 +608,7 @@
             if (next < 1 || next > 10) return;
             manualSlots[market] = next; // Immediate visual feedback
 
+            // ... existing slot code ...
             try {
                 await fetch('/api/config/slots', {
                     method: 'POST',

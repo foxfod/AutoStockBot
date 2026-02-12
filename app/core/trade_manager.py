@@ -17,6 +17,45 @@ class TradeManager:
         self.start_balance_usd = 0
         self.trade_history = [] 
         self.manual_slots = {} # {market_type: count}
+        
+        # Trading Switches (Persistent)
+        self.trading_state_file = "trading_state.json"
+        self.market_status = self.load_trading_state()
+
+    def load_trading_state(self):
+        """Load ON/OFF state from file"""
+        import json
+        import os
+        try:
+            if os.path.exists(self.trading_state_file):
+                with open(self.trading_state_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load trading state: {e}")
+        
+        # Default: Both ON
+        return {"KR": True, "US": True}
+
+    def save_trading_state(self):
+        """Save ON/OFF state to file"""
+        import json
+        try:
+            with open(self.trading_state_file, 'w', encoding='utf-8') as f:
+                json.dump(self.market_status, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            logger.error(f"Failed to save trading state: {e}")
+
+    def set_market_status(self, market: str, is_active: bool):
+        """Turn Market ON/OFF"""
+        self.market_status[market] = is_active
+        self.save_trading_state()
+        status = "ON" if is_active else "OFF"
+        logger.info(f"🔄 Trading Switch: {market} -> {status}")
+        bot.send_message(f"🔄 {market} 주식 거래가 **{status}** 되었습니다.")
+
+    def is_market_active(self, market: str) -> bool:
+        """Check if market is enabled"""
+        return self.market_status.get(market, True)
 
     def set_manual_slots(self, market: str, count: int):
         """Set manual slot limit for market"""

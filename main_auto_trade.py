@@ -158,6 +158,14 @@ async def trading_loop():
                     await asyncio.sleep(1)
                     continue
 
+                # --- NEW: Check Switch ---
+                if not trade_manager.is_market_active("KR"):
+                    if now.minute % 10 == 0 and now.second < 5:
+                         logger.info("🚫 KR Market is set to OFF. Skipping activities.")
+                    await asyncio.sleep(1)
+                    continue
+                # -------------------------
+
                 # 0. Pre-Market Analysis (08:30 ~ 08:50)
                 if is_time_in_range(KR_START, dtime(8, 50), t) and not state['kr_pre_market_done']:
                      await selector.select_pre_market_picks("KR")
@@ -262,6 +270,14 @@ async def trading_loop():
                          logger.info(f"US Market Check: Closed ({reason}). Sleeping...")
                      await asyncio.sleep(1)
                      continue
+
+                # --- NEW: Check Switch ---
+                if not trade_manager.is_market_active("US"):
+                    if now.minute % 10 == 0 and now.second < 5:
+                         logger.info("🚫 US Market is set to OFF. Skipping activities.")
+                    await asyncio.sleep(1)
+                    continue
+                # -------------------------
                 
                 # 0. Pre-Market Analysis (22:00 ~ 22:30)
                 if is_time_in_range(US_START, dtime(22, 30), t) and not state['us_pre_market_done']:
