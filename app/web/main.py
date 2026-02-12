@@ -149,6 +149,11 @@ async def update_trade(symbol: str, update: TradeUpdate, user=Depends(login_requ
     if not tm:
          raise HTTPException(status_code=503, detail="TradeManager not ready")
 
+    success = tm.update_trade_settings(symbol, update.target_price, update.stop_loss_price)
+    if not success:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    return {"status": "success", "message": "Trade settings updated"}
+
 # --- Trading Switches API ---
 class MarketStatusUpdate(BaseModel):
     market: str  # KR or US
@@ -168,11 +173,6 @@ async def toggle_market_status(update: MarketStatusUpdate, user=Depends(login_re
     
     tm.set_market_status(update.market, update.state)
     return {"status": "success", "market": update.market, "state": update.state}
-    
-    success = tm.update_trade_settings(symbol, update.target_price, update.stop_loss_price)
-    if not success:
-        raise HTTPException(status_code=404, detail="Trade not found")
-    return {"status": "success", "message": "Trade settings updated"}
 
 @app.post("/api/analyze/{symbol}")
 async def analyze_trade(symbol: str, user=Depends(login_required)):
