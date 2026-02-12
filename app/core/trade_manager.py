@@ -294,7 +294,7 @@ class TradeManager:
             symbol = stock['symbol']
             name = stock['name']
             current_price = float(stock['price'])
-            market_type = stock.get('market_type', 'KR')
+            market_type = stock.get('market_type') or stock.get('market', 'KR')
             excg = stock.get('excg', 'NAS')
             
             if symbol in self.active_trades:
