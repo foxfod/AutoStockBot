@@ -732,12 +732,18 @@ class KisApi:
         
         ord_div = "00" # Limit
         
-        logger.info(f"Sending US Buy Order: {symbol} ({excg_cd}) {qty}sh @ {price}")
+        # Map 4-char to 3-char for API
+        mapped_excg = excg_cd
+        if excg_cd == "NASD": mapped_excg = "NAS"
+        elif excg_cd == "NYSE": mapped_excg = "NYS"
+        elif excg_cd == "AMEX": mapped_excg = "AMS"
+
+        logger.info(f"Sending US Buy Order: {symbol} ({excg_cd}->{mapped_excg}) {qty}sh @ {price}")
 
         body = {
             "CANO": self.account_no,
             "ACNT_PRDT_CD": "01",
-            "OVRS_EXCG_CD": excg_cd,
+            "OVRS_EXCG_CD": mapped_excg,
             "PDNO": symbol,
             "ORD_QTY": str(qty),
             "OVRS_ORD_UNPR": f"{price:.2f}",
@@ -778,10 +784,16 @@ class KisApi:
         
         ord_div = "00" # Limit
         
+        # Map 4-char to 3-char for API
+        mapped_excg = excg_cd
+        if excg_cd == "NASD": mapped_excg = "NAS"
+        elif excg_cd == "NYSE": mapped_excg = "NYS"
+        elif excg_cd == "AMEX": mapped_excg = "AMS"
+        
         body = {
             "CANO": self.account_no,
             "ACNT_PRDT_CD": "01",
-            "OVRS_EXCG_CD": excg_cd,
+            "OVRS_EXCG_CD": mapped_excg,
             "PDNO": symbol,
             "ORD_QTY": str(qty),
             "OVRS_ORD_UNPR": f"{price:.2f}",
