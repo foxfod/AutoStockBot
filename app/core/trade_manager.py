@@ -845,6 +845,46 @@ class TradeManager:
                 except Exception as e:
                     logger.error(f"Error in Risk Monitor ({name}): {e}")
 
+                else: # No Exception
+                    # Handle HOLD Decision (Notify User if Loss is significant)
+                    if verdict == "HOLD" and pnl_rate < -1.0:
+                        # Throttling: Notify only if sufficient time passed or loss deepened
+                        last_notify = trade.get('last_hold_msg_time')
+                        last_pnl = trade.get('last_hold_msg_pnl', 0)
+                        
+                        now = datetime.now()
+                        should_notify = False
+                        
+                        if not last_notify:
+                            should_notify = True
+                        else:
+                            # 1. Time based: Every 30 mins
+                            time_diff = (now - datetime.strptime(last_notify, "%Y-%m-%d %H:%M:%S")).total_seconds() / 60
+                            if time_diff >= 30:
+                                should_notify = True
+                            # 2. Loss deepened by 1% since last msg
+                            elif pnl_rate < (last_pnl - 1.0):
+                                should_notify = True
+                        
+                        if should_notify:
+                            sl_price = trade.get('stop_loss_price', 0)
+                            sl_pct = ((buy_price - sl_price) / buy_price) * 100
+                            
+                            msg = (f"🛡️ AI 리스크 관리 (HOLD): {name}\n"
+                                   f"현재 수익률: {pnl_rate:.2f}%\n"
+                                   f"판단: 보유 유지 (Reason: {reason})\n"
+                                   f"설정된 손절가: -{sl_pct:.1f}%")
+                            
+                            bot.send_message(msg)
+                            
+                            # Update State
+                            trade['last_hold_msg_time'] = now.strftime("%Y-%m-%d %H:%M:%S")
+                            trade['last_hold_msg_pnl'] = pnl_rate
+                            self.save_history() # Persist state in active_trades (via save_history which saves active too?)
+                            # Note: active_trades are NOT persisted to file in current architecture.
+                            # They are re-synced from API on restart.
+                            # So 'last_hold_msg_time' will be lost on restart. This is acceptable.
+
     def clean_pending_orders(self):
         """Clean up pending orders if needed"""
         orders = kis.get_orders() # Returns list of orders today

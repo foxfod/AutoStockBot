@@ -223,44 +223,18 @@ async def analyze_trade(symbol: str, user=Depends(login_required)):
                     news_list.append(n.get('hts_pbnt_titl_cntt', ''))
                 news_list = news_list[:3]
         
-        # Step 4: Construct Report
-        step = "Report Generation"
-        report = f"### 🔍 {symbol} ({market_type})\n"
-        report += f"- 분석 시각: {time.strftime('%H:%M:%S')}\n\n"
-        
-        report += "#### 📈 기술적 지표\n"
-        report += f"- 현재가: {tech_summary.get('close', 'N/A')}\n"
-        report += f"- 추세: {tech_summary.get('trend', 'N/A')}\n"
-        report += f"- RSI: {tech_summary.get('rsi', 'N/A')}\n\n"
-        
-        report += "#### 📰 관련 뉴스\n"
-        if news_list:
-            for n in news_list:
-                report += f"- {n}\n"
-        else:
-            report += "- 관련 뉴스 없음\n"
-        report += "\n"
-        
-        report += "#### 🤖 AI 종합 의견\n"
-        
-        # Step 5: AI Analysis
+        # Step 4: AI Analysis (Full Report)
         step = "AI Analysis"
-        # Check if we have enough data for AI
+        stock_name = trade.get('name', symbol)
+        
         if not tech_summary.get('close'):
-            report += "- ⚠️ 기술적 데이터 부족으로 AI 분석 스킵.\n"
+            report = f"### {stock_name} ({symbol})\n⚠️ 기술적 데이터 부족으로 AI 분석을 수행할 수 없습니다."
         else:
-            ai_result = await ai_analyzer.analyze_stock(symbol, news_list, tech_summary)
+            # Use dedicated holding analysis function
+            # This returns a full Markdown report including context and strategy
+            report = await ai_analyzer.analyze_holding_stock(symbol, stock_name, tech_summary, news_list)
             
-            score = ai_result.get('score', 0)
-            reason = ai_result.get('reason', '분석 불가')
-            action = ai_result.get('action', 'N/A')
-            
-            report += f"- **점수**: {score}점 ({action})\n"
-            report += f"- **판단**: {reason}\n"
-            
-            strategy = ai_result.get('strategy', {})
-            if strategy:
-                report += f"- **전략**: 목표 {strategy.get('target_price')}% / 손절 {strategy.get('stop_loss')}%\n"
+        return {"result": report}
             
         return {"result": report}
         
