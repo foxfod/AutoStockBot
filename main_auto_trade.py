@@ -94,21 +94,37 @@ def check_market_open(market_type="KR"):
     """
     Check if the market is open based on:
     1. Weekend (Sat/Sun) -> Closed
+       - Exception: US Market is OPEN on Saturday Morning (Fri Session)
+       - Exception: US Market is CLOSED on Monday Morning (Sun Session)
     2. Circuit Breaker Flag -> Closed (If API noted holiday previously)
     """
     now = datetime.now()
     
     # 1. Check Weekend (0=Mon, 5=Sat, 6=Sun)
-    if now.weekday() >= 5:
-        return False, "Weekend (Sat/Sun)"
+    if market_type == "US":
+        # Saturday Morning (until 08:00 KST) is part of Friday Session -> OPEN
+        if now.weekday() == 5 and now.time() < dtime(8, 0):
+             pass # Treat as Open (Friday Night extension)
+        
+        # Monday Morning (until 08:00 KST) is part of Sunday Session -> CLOSED
+        elif now.weekday() == 0 and now.time() < dtime(8, 0):
+             return False, "주말 (일요일)" # Weekend (Sunday)
+             
+        elif now.weekday() >= 5:
+             return False, "주말 (토/일)" # Weekend (Sat/Sun)
+             
+    else:
+        # KR Market
+        if now.weekday() >= 5:
+            return False, "주말 (토/일)" # Weekend (Sat/Sun)
         
     # 2. Check Circuit Breaker
     if market_type == "KR" and state.get("kr_market_closed"):
-        return False, "KR Market Closed Flag Active"
+        return False, "국장 종료/휴장 플래그 활성"
     if market_type == "US" and state.get("us_market_closed"):
-        return False, "US Market Closed Flag Active"
+        return False, "미장 종료/휴장 플래그 활성"
         
-    return True, "Open"
+    return True, "장 운영 중"
 
 async def trading_loop():
     """Original Main Loop extracted to a function"""
@@ -154,7 +170,9 @@ async def trading_loop():
                 is_open, reason = check_market_open("KR")
                 if not is_open:
                     if now.minute == 0 and now.second < 5: # Log once per hour
-                        logger.info(f"KR Market Check: Closed ({reason}). Sleeping...")
+                        msg = f"💤 한국장 휴장/마감 ({reason}). 봇 대기 모드..."
+                        logger.info(msg)
+                        bot.send_message(msg)
                     await asyncio.sleep(1)
                     continue
 
@@ -267,7 +285,9 @@ async def trading_loop():
                 is_open, reason = check_market_open("US")
                 if not is_open:
                      if now.minute == 0 and now.second < 5:
-                         logger.info(f"US Market Check: Closed ({reason}). Sleeping...")
+                         msg = f"💤 미국장 휴장/마감 ({reason}). 봇 대기 모드..."
+                         logger.info(msg)
+                         bot.send_message(msg)
                      await asyncio.sleep(1)
                      continue
 
