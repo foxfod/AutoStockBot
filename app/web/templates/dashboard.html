@@ -162,7 +162,6 @@
             <!-- Slot Management Cards -->
             <div class="grid grid-cols-2 gap-4">
                 <!-- KR Slots -->
-                <!-- KR Slots -->
                 <div id="kr-slot-box" onclick="filterTrades('KR')"
                     class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-sm transition hover:border-gray-600 cursor-pointer">
                     <div class="flex justify-between items-center mb-2">
@@ -184,7 +183,6 @@
                     </div>
                 </div>
 
-                <!-- US Slots -->
                 <!-- US Slots -->
                 <div id="us-slot-box" onclick="filterTrades('US')"
                     class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-sm transition hover:border-gray-600 cursor-pointer">
@@ -211,16 +209,14 @@
             <!-- Active Positions Grid -->
             <div class="flex-1 flex flex-col min-h-0">
                 <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
-                    <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
-                        <span id="grid-title">보유 종목 현황</span>
-                        <span id="active-count"
-                            class="bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">0</span>
-                    </h2>
-                    <div id="active-trades-grid"
-                        class="flex-1 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto pr-1">
-                        <!-- Cards -->
-                        <div class="col-span-full text-center text-gray-600 py-10 text-sm">보유 중인 종목이 없습니다</div>
-                    </div>
+                    <span id="grid-title">보유 종목 현황</span>
+                    <span id="active-count"
+                        class="bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">0</span>
+                </h2>
+                <div id="active-trades-grid" class="flex-1 grid grid-cols-1 xl:grid-cols-2 gap-3 overflow-y-auto pr-1">
+                    <!-- Cards -->
+                    <div class="col-span-full text-center text-gray-600 py-10 text-sm">보유 중인 종목이 없습니다</div>
+                </div>
             </div>
 
         </div>
@@ -386,16 +382,9 @@
                 <button onclick="sellTrade()"
                     class="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-bold text-white transition flex items-center justify-center gap-2">
                     🚨 전량 매도 (시장가)
-                    class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white transition flex
-                    items-center gap-1">
-                    🔄 KR 갱신
                 </button>
-                <button onclick="refreshTopPicks('US')"
-                    class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white transition flex items-center gap-1">
-                    🔄 US 갱신
-                </button>
-                <button onclick="closeTopPicksModal()"
-                    class="px-4 py-1.5 bg-gray-600 hover:bg-gray-500 rounded text-xs font-bold text-white transition">닫기</button>
+                <button onclick="closeModal()"
+                    class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-sm font-bold text-white transition">닫기</button>
             </div>
         </div>
     </div>
@@ -417,6 +406,7 @@
         let currentSymbol = null; // For Modal
         let manualSlots = {}; // {KR: 3, US: 2}
         let currentFilter = 'ALL'; // 'ALL', 'KR', 'US'
+        let currentTopPickMarket = 'KR'; // Add this global variable here
 
         // Helper Functions
         const fmt = (n) => n ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
@@ -448,8 +438,6 @@
 
                 // 5. Slots
                 if (data.manual_slots) {
-                    // Only re-render if changed to avoid flickering (simple check)
-                    // But manualSlots is simple object.
                     manualSlots = data.manual_slots;
                     renderSlots('KR');
                     renderSlots('US');
@@ -487,7 +475,6 @@
                 `;
             }).join('');
 
-            // Only update if content changed to avoid jitter (simple check)
             if (container.innerHTML !== html) {
                 container.innerHTML = html;
             }
@@ -501,7 +488,6 @@
             const krBox = document.getElementById('kr-slot-box');
             const usBox = document.getElementById('us-slot-box');
 
-            // Reset
             krBox.classList.remove('ring-2', 'ring-blue-500');
             usBox.classList.remove('ring-2', 'ring-blue-500');
 
@@ -510,6 +496,14 @@
             } else if (filter === 'US') {
                 usBox.classList.add('ring-2', 'ring-blue-500');
             }
+
+            // Update UI Highlights
+            document.getElementById('kr-slot-box').className = `bg-gray-800 rounded-lg p-3 border shadow-sm cursor-pointer transition ${filter === 'KR' ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-700 hover:border-gray-600'}`;
+            document.getElementById('us-slot-box').className = `bg-gray-800 rounded-lg p-3 border shadow-sm cursor-pointer transition ${filter === 'US' ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-700 hover:border-gray-600'}`;
+
+            // Update Title
+            const titleMap = { 'ALL': '보유 종목 현황', 'KR': '보유 종목 현황 (한국)', 'US': '보유 종목 현황 (미국)' };
+            document.getElementById('grid-title').innerText = titleMap[filter];
         }
 
         function renderTrades(trades) {
@@ -568,21 +562,6 @@
             }).join('');
         }
 
-        function filterTrades(market) {
-            currentFilter = market;
-
-            // Update UI Highlights
-            document.getElementById('kr-slot-box').className = `bg-gray-800 rounded-lg p-3 border shadow-sm cursor-pointer transition ${market === 'KR' ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-700 hover:border-gray-600'}`;
-            document.getElementById('us-slot-box').className = `bg-gray-800 rounded-lg p-3 border shadow-sm cursor-pointer transition ${market === 'US' ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-700 hover:border-gray-600'}`;
-
-            // Re-render
-            renderTrades(currentTrades);
-
-            // Update Title
-            const titleMap = { 'ALL': '보유 종목 현황', 'KR': '보유 종목 현황 (한국)', 'US': '보유 종목 현황 (미국)' };
-            document.getElementById('grid-title').innerText = titleMap[market];
-        }
-
         // --- Actions ---
         async function controlAction(action) {
             const actionName = {
@@ -623,13 +602,6 @@
         }
 
         async function toggleMarket(market) {
-            // Optimistic Toggle logic not easy without current state, just fetch after server response.
-            // But to be smooth, we should know current state.
-            // Let's rely on server toggle endpoint (we implemented set status, not toggle, but UI is toggle).
-            // Actually we need to know current state to toggle.
-            // The endpoint expects {market, state}.
-
-            // 1. Get current state from UI class (hacky but works)
             const btn = document.getElementById(`switch-${market.toLowerCase()}`);
             const isCurrentlyOn = btn.className.includes('bg-green-500');
             const newState = !isCurrentlyOn;
@@ -642,7 +614,6 @@
                 });
 
                 if (res.ok) {
-                    // Update UI immediately
                     updateSwitchUI();
                 } else {
                     alert("스위치 변경 실패");
@@ -650,12 +621,8 @@
             } catch (e) { console.error(e); }
         }
 
-        // Call this periodically or on load
         setInterval(updateSwitchUI, 5000); // Polling every 5s for sync
         document.addEventListener('DOMContentLoaded', updateSwitchUI);
-
-        // Initialize manualSlots with defaults to prevent errors before first fetch
-        // manualSlots is already defined at top as {}
 
         function renderSlots(market) {
             const count = manualSlots[market] || 3;
@@ -671,7 +638,6 @@
         }
 
         async function updateSlots(market, change) {
-            // Optimistic Update
             let current = (manualSlots[market] || 3);
             let next = current + change;
             if (next < 1 || next > 10) return;
@@ -687,7 +653,6 @@
                 });
             } catch (e) {
                 console.error("Slot update failed", e);
-                // Revert on failure? For now, just log.
             }
         }
 
@@ -700,7 +665,6 @@
             const isUS = t.market_type === 'US';
             const pnlClass = t.profit_rate > 0 ? 'text-green-400' : 'text-red-400';
 
-            // Use values from backend, or calculate default target/stop for display if missing
             const targetP = t.target_price
                 ? ((t.target_price - t.buy_price) / t.buy_price * 100).toFixed(1)
                 : '3.0';
@@ -725,15 +689,12 @@
             document.getElementById('modal-profit-amt').innerText = `${profitAmt > 0 ? '+' : ''}${isUS ? '$' : ''}${fmt(profitAmt)}`;
             document.getElementById('modal-profit-amt').className = `font-mono ${profitAmt > 0 ? 'text-green-400' : 'text-red-400'}`;
 
-            // Inputs (Display percentages)
             document.getElementById('input-target').value = targetP;
             document.getElementById('input-stop').value = stopP;
 
-            // Update Previews
             calcPricePreview('target');
             calcPricePreview('stop');
 
-            // Reset or Load Analysis Result
             const resultArea = document.getElementById('analysis-result');
             if (analysisCache[symbol]) {
                 resultArea.classList.remove('hidden');
@@ -750,7 +711,6 @@
         function closeModal() {
             modal.classList.add('modal-hidden');
             currentSymbol = null;
-            // Clear analysis view to prevent flickering
             document.getElementById('analysis-result').innerHTML = '';
             document.getElementById('analysis-result').classList.add('hidden');
         }
@@ -766,7 +726,6 @@
                 return;
             }
 
-            // Calculate actual prices from percentages
             const targetPrice = t.buy_price * (1 + targetPct / 100);
             const stopLossPrice = t.buy_price * (1 - stopPct / 100);
 
@@ -792,7 +751,6 @@
             if (!currentSymbol || !confirm(`${currentSymbol} 종목을 시장가로 전량 매도하시겠습니까?`)) return;
 
             try {
-                // Determine market type from currentTrades
                 const type = currentTrades[currentSymbol].market_type;
                 const url = `/api/trade/${currentSymbol}/sell?market_type=${type}`;
                 const res = await fetch(url, { method: 'POST' });
@@ -816,7 +774,6 @@
             const btn = document.querySelector('button[onclick="analyzeStock()"]');
             const resultArea = document.getElementById('analysis-result');
 
-            // UI Loading State
             const originalText = btn.innerHTML;
             btn.innerHTML = `<span class="animate-spin">⌛</span> 분석 중...`;
             btn.disabled = true;
@@ -829,11 +786,8 @@
 
                 resultArea.classList.remove('hidden');
                 if (data.result) {
-                    // Cache the result
                     analysisCache[currentSymbol] = data.result;
-                    // Display result
-                    resultArea.innerHTML = data.result; // Use innerHTML to render line breaks if any
-                    // Add re-analyze hint
+                    resultArea.innerHTML = data.result;
                     resultArea.innerHTML += "\n\n<span class='text-gray-500'>Make sure to click the button again if you want a fresh analysis.</span>";
                 } else {
                     resultArea.innerText = "분석 결과를 가져오지 못했습니다.";
@@ -879,7 +833,6 @@
         let reconnectTimer = null;
 
         function connectWebSocket() {
-            // UI Loading State (Optional: Only if triggered by button)
             const btn = document.querySelector('button[title="Reconnect WebSocket"]');
             if (btn) {
                 btn.innerHTML = '<span class="animate-spin inline-block">🔄</span>';
@@ -889,9 +842,8 @@
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
 
-            // Cleanup existing connection
             if (ws) {
-                ws.onclose = null; // Prevent trigger loop during manual close
+                ws.onclose = null;
                 ws.close();
             }
             if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -905,7 +857,6 @@
                 overlay.classList.add('hidden');
                 addLog({ data: { timestamp: new Date().toLocaleTimeString(), level: 'SYSTEM', message: 'Connected to Live Stream' } });
 
-                // Reset Button
                 if (btn) {
                     btn.innerHTML = '🔄';
                     btn.disabled = false;
@@ -922,8 +873,6 @@
                     btn.innerHTML = '🔄';
                     btn.disabled = false;
                 }
-
-                // Auto Reconnect
                 reconnectTimer = setTimeout(connectWebSocket, 3000);
             };
             ws.onerror = () => {
@@ -948,16 +897,12 @@
         }
         function clearLogs() { logContainer.innerHTML = ''; }
 
-        // Init
         const inputTarget = document.getElementById('input-target');
         const inputStop = document.getElementById('input-stop');
         const logContainer = document.getElementById('log-container');
 
-        // Connect
         connectWebSocket();
         setInterval(fetchState, 2000);
-
-        // Initial Fetch
         fetchState();
 
         const modal = document.getElementById('trade-modal');
@@ -967,12 +912,11 @@
 
         // --- Top 10 Modal & Add Pick Logic ---
         const topPicksModal = document.getElementById('top-picks-modal');
-        const addPickForm = document.getElementById('add-pick-form'); // New form container
+        const addPickForm = document.getElementById('add-pick-form');
 
         async function openTopPicksModal() {
             topPicksModal.classList.remove('modal-hidden');
             document.body.style.overflow = 'hidden';
-            // Default to KR if not set
             if (!currentTopPickMarket) switchTopPickTab('KR');
             else loadTopPicks(currentTopPickMarket);
         }
@@ -981,8 +925,6 @@
             topPicksModal.classList.add('modal-hidden');
             document.body.style.overflow = '';
         }
-
-        let currentTopPickMarket = 'KR';
 
         function switchTopPickTab(market) {
             currentTopPickMarket = market;
@@ -1020,7 +962,6 @@
 
                 if (res.ok) {
                     alert('추가되었습니다.');
-                    // Reset form
                     document.getElementById('add-ticker').value = '';
                     document.getElementById('add-name').value = '';
                     document.getElementById('add-reason').value = '';
@@ -1041,7 +982,6 @@
             if (!market) market = currentTopPickMarket;
             const listContainer = document.getElementById('top-picks-list');
 
-            // Show skeleton or loading
             listContainer.innerHTML = '<div class="text-center py-10 text-gray-500">데이터 로딩 중...</div>';
 
             try {
@@ -1049,27 +989,49 @@
                 const data = await res.json();
 
                 if (!data.picks || data.picks.length === 0) {
-                    document.getElementById('top-picks-date').innerText = new Date().toLocaleDateString();
+                    listContainer.innerHTML = `
+                        <div class="text-center text-gray-500 py-10 flex flex-col items-center gap-2">
+                             <span>📭</span>
+                             <span>아직 선정된 종목이 없습니다.</span>
+                             <button onclick="refreshTopPicks('${market}')" class="mt-2 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded text-xs text-white">
+                                지금 AI 분석 시작
+                             </button>
+                        </div>`;
+                    document.getElementById('top-picks-status').innerText = 'Empty';
                     return;
                 }
 
-                document.getElementById('top-picks-date').innerText = `${data.date} (${data.market})`;
+                document.getElementById('top-picks-status').innerHTML = `<span class="text-green-400">Success</span> <span class="text-gray-500 text-xs ml-2">${data.timestamp ? new Date(data.timestamp).toLocaleString() : ''}</span>`;
 
-                listContainer.innerHTML = data.picks.map((p, i) => `
-                    <div class="bg-gray-700/50 p-3 rounded border border-gray-700 flex flex-col gap-2">
-                        <div class="flex justify-between items-start">
+                listContainer.innerHTML = data.picks.map((p, i) => {
+                    const isUser = p.source === 'USER';
+                    const icon = isUser ? '👤' : '🤖';
+                    const badgeClass = isUser ? 'bg-purple-600' : 'bg-blue-600';
+                    const scoreDisplay = p.score ? `<span class="text-yellow-400 font-bold text-sm">${p.score}점</span>` : '';
+
+                    return `
+                    <div class="bg-gray-700/50 p-3 rounded border border-gray-700 flex flex-col gap-2 relative group">
+                        <button onclick="deleteTopPick('${market}', '${p.ticker}')" class="absolute top-2 right-2 text-gray-400 hover:text-red-400 p-1 rounded hover:bg-gray-800 transition-all z-10" title="삭제">
+                            🗑️
+                        </button>
+                        <div class="flex justify-between items-start pr-6">
                             <div class="flex items-center gap-2">
-                                <span class="bg-blue-600 text-white text-[10px] font-bold px-1.5 rounded">${i + 1}</span>
-                                <span class="font-bold text-white">${p.name}</span>
-                                <span class="text-xs text-gray-400">(${p.symbol})</span>
+                                <span class="${badgeClass} text-white text-[10px] font-bold px-1.5 rounded" title="${isUser ? '사용자 추가' : 'AI 선정'}">${icon}</span>
+                                <span class="font-bold text-white text-lg">${p.stock_name}</span>
+                                <span class="text-sm text-gray-400 font-mono">${p.ticker}</span>
                             </div>
-                            <span class="text-yellow-400 font-bold text-sm">${p.score}점</span>
+                            ${scoreDisplay}
                         </div>
-                        <div class="text-xs text-gray-300 bg-gray-900/50 p-2 rounded">
-                            ${p.reason}
+                        <div class="text-sm text-gray-300 bg-gray-900/30 p-2 rounded border border-gray-700/50">
+                            ${p.selection_reason}
+                        </div>
+                        
+                         <div class="flex gap-4 text-xs text-gray-400 mt-1">
+                            ${p.target_price_today ? `<span>🎯 목표: <span class="text-red-300">${p.target_price_today}</span></span>` : ''}
+                            ${p.current_price ? `<span>현재: ${p.current_price}</span>` : ''}
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
 
             } catch (e) {
                 console.error(e);
@@ -1078,10 +1040,17 @@
         }
 
         async function refreshTopPicks(market) {
+            if (!market) market = currentTopPickMarket;
             if (!confirm(`${market} 시장 분석을 시작하시겠습니까?\n(약 1~2분 소요될 수 있습니다)`)) return;
 
             const listContainer = document.getElementById('top-picks-list');
-            listContainer.innerHTML = '<div class="text-center text-gray-400 py-10 flex flex-col items-center gap-2"><span class="text-2xl animate-spin">⏳</span><span>AI가 심층 분석 중입니다...</span></div>';
+            listContainer.innerHTML = `
+                <div class="text-center text-gray-400 py-20 flex flex-col items-center gap-4 animate-pulse">
+                    <span class="text-4xl animate-spin">⏳</span>
+                    <span class="text-lg font-bold text-blue-300">AI가 시장을 심층 분석 중입니다...</span>
+                    <span class="text-sm">뉴스를 읽고 전략을 수립하는 중입니다. 잠시만 기다려주세요.</span>
+                </div>`;
+            document.getElementById('top-picks-status').innerHTML = '<span class="text-yellow-400 animate-pulse">Loading...</span>';
 
             try {
                 const res = await fetch('/api/top-picks/refresh', {
@@ -1090,10 +1059,29 @@
                     body: JSON.stringify({ market })
                 });
                 const data = await res.json();
-                await loadTopPicks(); // Reload logic handles display
+                if (data.status === 'error') {
+                    alert(`오류 발생: ${data.message}`);
+                    loadTopPicks(market); // Revert
+                } else {
+                    await loadTopPicks(market);
+                }
             } catch (e) {
                 console.error(e);
-                listContainer.innerHTML = '<div class="text-center text-red-500 py-10">분석 요청 실패</div>';
+                listContainer.innerHTML = '<div class="text-center text-red-500 py-10">분석 요청 실패 (서버 오류)</div>';
+            }
+        }
+
+        async function deleteTopPick(market, symbol) {
+            if (!confirm(`'${symbol}' 종목을 리스트에서 삭제하시겠습니까?`)) return;
+            try {
+                const res = await fetch(`/api/top-picks/${market}/${symbol}`, { method: 'DELETE' });
+                if (res.ok) {
+                    loadTopPicks(market);
+                } else {
+                    alert("삭제 실패");
+                }
+            } catch (e) {
+                console.error(e);
             }
         }
 
