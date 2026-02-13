@@ -297,12 +297,14 @@ async def refresh_top_picks(req: TopPicksRequest, user=Depends(login_required)):
     """
     Trigger a fresh analysis for Top 10.
     """
+    from app.core.market_analyst import market_analyst
+    
     try:
         # Prevent concurrent runs? selector.select_pre_market_picks might handle it or we assume user is careful.
         # It takes time, so we should probably run it and return, or wait?
         # User wants to see the result, so we await.
         
-        picks = await selector.select_pre_market_picks(req.market, force=True)
+        picks = await market_analyst.generate_top_10_picks(req.market)
         
         # Read the file again to return full structure or just return picks
         # select_pre_market_picks returns the list of dicts.
@@ -311,12 +313,44 @@ async def refresh_top_picks(req: TopPicksRequest, user=Depends(login_required)):
         return {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "market": req.market,
-            "picks": picks
+            "picks": picks,
+            "status": "success"
         }
     except Exception as e:
         logging.error(f"Error refreshing top picks: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "error", "message": str(e)}
 
+@app.delete("/api/top-picks/{market}/{symbol}")
+async def delete_top_pick(market: str, symbol: str, user=Depends(login_required)):
+    """
+    Remove a stock from the Top 10 list.
+    """
+    try:
+        file_path = f"app/data/top_picks_{market}.json"
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found")
+            
+        with open(file_path, "r", encoding='utf-8') as f:
+            data = json.load(f)
+            
+        original_len = len(data.get("picks", []))
+        data["picks"] = [p for p in data.get("picks", []) if p["ticker"] != symbol]
+        
+        if len(data["picks"]) == original_len:
+             raise HTTPException(status_code=404, detail="Stock not found in list")
+             
+        # Save back
+        with open(file_path, "w", encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            
+        return {"status": "success", "message": f"Deleted {symbol}"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting top pick: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/state")

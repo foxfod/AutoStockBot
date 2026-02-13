@@ -154,4 +154,75 @@ class MarketAnalyst:
         return trend_stocks
 
 
+    async def generate_top_10_picks(self, market_type="KR"):
+        """
+        Generates Top 10 Picks using AI Context Analysis (Stock Selection v2).
+        Returns: list of dicts (the Top 10 picks)
+        """
+        import json
+        import os
+        from datetime import datetime
+        from app.core.ai_analyzer import ai_analyzer
+        from app.core.telegram_bot import bot
+
+        logger.info(f"Generating Top 10 Picks for {market_type}...")
+        bot.send_message(f"🧠 AI가 {market_type} 시장 데이터를 분석하여 Top 10 종목을 선정합니다...")
+
+        # 1. Collect Context Data
+        news_titles = self.scrape_market_news(market_type)
+        market_status = self.get_market_status(market_type)
+        
+        # 2. Call AI with New Prompt (JSON Output)
+        try:
+            ai_result = await ai_analyzer.analyze_market_context_and_pick_top10(
+                market_type, 
+                market_status, 
+                news_titles
+            )
+        except Exception as e:
+            logger.error(f"AI Analysis Failed: {e}")
+            bot.send_message(f"❌ AI 분석 중 오류 발생: {e}")
+            return []
+
+        # 3. Validation & Saving
+        if not ai_result or 'top_10_picks' not in ai_result:
+            logger.error("Invalid AI Result Format")
+            return []
+
+        top_10 = ai_result['top_10_picks']
+        
+        # Save to File
+        file_path = f"app/data/top_picks_{market_type}.json"
+        try:
+            os.makedirs("app/data", exist_ok=True)
+            with open(file_path, "w", encoding='utf-8') as f:
+                json.dump({
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "market": market_type,
+                    "market_summary": ai_result.get('market_summary', {}),
+                    "picks": top_10,
+                    "timestamp": datetime.now().isoformat()
+                }, f, ensure_ascii=False, indent=2)
+            logger.info(f"Saved Top 10 to {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to save Top 10 file: {e}")
+
+        # 4. Report to Telegram
+        summary = ai_result.get('market_summary', {})
+        outlook = summary.get('outlook', 'N/A')
+        strategy = summary.get('strategy', 'N/A')
+        
+        msg = f"🌟 [{market_type}] AI 시장 분석 완료\n"
+        msg += f"📊 전망: {outlook}\n💡 전략: {strategy}\n\n🏆 오늘의 Top 10:\n"
+        
+        for i, stock in enumerate(top_10[:5], 1): # Show only top 5 in msg to avoid clutter
+            msg += f"{i}. {stock['stock_name']} ({stock['ticker']})\n   └ {stock['selection_reason']}\n"
+        
+        if len(top_10) > 5:
+            msg += f"...외 {len(top_10)-5}개 대시보드 확인"
+
+        bot.send_message(msg)
+        
+        return top_10
+
 market_analyst = MarketAnalyst()

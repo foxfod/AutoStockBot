@@ -567,5 +567,91 @@ class AIAnalyzer:
             return [s['symbol'] for s in stock_list[:15]]
 
 
+    async def analyze_market_context_and_pick_top10(self, market_type: str, market_status: dict, news_titles: list) -> dict:
+        """
+        [Stock Selection v2]
+        Analyze Market Context + News -> Generate Top 10 Picks (JSON).
+        """
+        trend = market_status.get('trend', 'Neutral')
+        desc = market_status.get('description', 'Flat')
+        
+        news_str = "\n".join([f"- {t}" for t in news_titles]) if news_titles else "No major news."
+        
+        prompt = f"""
+        You are a Top-Tier Fund Manager with 20 years of experience.
+        Your goal is to select the **Top 10 Most Promising Stocks** for TODAY's trading session in the **{market_type} Market**.
+        
+        [Current Market Status]
+        - Trend: {trend} ({desc})
+        - Date: {market_status.get('data', {}).get('date', 'Today')}
+        
+        [Latest Headlines]
+        {news_str}
+        
+        [Task]
+        1. **Analyze Context**: Based on the news and market trend, determine the 'Key Themes' (e.g. AI Rally, Rate Cut Hopes, War Fear).
+        2. **Select Stocks**: Identify 10 stocks that will benefit MOST from these themes.
+           - If Market is BULL: Pick High Beta / Momentum Leaders.
+           - If Market is BEAR: Pick Defensive / Dividend / Inverse ETFs (if applicable).
+        3. **Criteria**:
+           - Must be a valid traded symbol in {market_type}.
+           - For KR: Use 6-digit code if possible (e.g. 005930).
+           - For US: Use Ticker (e.g. NVDA).
+           
+        [Output Format (JSON Compliance is CRITICAL)]
+        {{
+            "market_summary": {{
+                "outlook": "Bullish/Bearish/Neutral",
+                "key_issues": ["Issue 1", "Issue 2"],
+                "strategy": "Your comprehensive trading strategy for today (Korean)"
+            }},
+            "top_sectors": [
+                {{ "sector_name": "Sector Name", "reason": "Why moving today", "related_stocks": ["Stock A", "Stock B"] }}
+            ],
+            "top_10_picks": [
+                {{
+                    "stock_name": "Stock Name",
+                    "ticker": "Symbol/Code",
+                    "selection_reason": "One line reason (Korean)",
+                    "expected_open_price": <Estimated Open Price or 0>,
+                    "target_price_today": <Target Price or 0>
+                }}
+                // ... Exactly 10 items
+            ]
+        }}
+        """
+        
+        try:
+            logger.info(f"AI Generating Top 10 for {market_type}...")
+            
+            # 1. GPT Analysis
+            res = await self.openai_client.chat.completions.create(
+                model=self.gpt_model,
+                messages=[
+                    {"role": "system", "content": "You are a professional fund manager. Output JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(self._clean_json_text(res.choices[0].message.content))
+            return data
+            
+        except Exception as e:
+            logger.error(f"GPT Top 10 Generation Failed: {e}")
+            # Fallback to Gemini?
+            if self.gemini_model:
+                try:
+                    logger.info("Switching to Gemini for Top 10...")
+                    res = await self.gemini_model.generate_content_async(
+                        prompt, 
+                        generation_config={"response_mime_type": "application/json"}
+                    )
+                    return json.loads(self._clean_json_text(res.text))
+                except Exception as g_e:
+                    logger.error(f"Gemini Top 10 Generation Failed: {g_e}")
+                    
+            return {}
+
+
 
 ai_analyzer = AIAnalyzer()

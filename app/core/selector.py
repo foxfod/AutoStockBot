@@ -383,281 +383,163 @@ class Selector:
             return None
         return None
 
-    async def select_stocks(self, budget=None, target_count=3):
+    async def select_stocks_kr(self, budget=None, target_count=3):
         """
-        Main logic to select stocks for scalping (Async Optimized).
-        budget: Available KRW. If set, filter out expensive stocks.
-        target_count: Number of stocks to select (to fill slots).
+        [Stock Selection v2] KR Market Selection Pipeline
+        Time: 08:30 ~ 14:30 (10 min interval)
         """
-        import asyncio
-        from app.core.telegram_bot import bot # Import bot for reporting
+        from app.core.technical_analysis import technical
         from app.core.market_analyst import market_analyst
-        
-        start_time = time.time()
-        
-        # 0. Market Context (Top-Down)
-        market_ctx = market_analyst.get_market_context_for_ai("KR")
-        logger.info(f"Market Context: {market_ctx}")
-        bot.send_message(f"🌍 시장 분석 결과: {market_ctx}")
-
-        logger.info(f"Starting stock selection (Budget: {budget:,.0f} KRW, Target: {target_count})...")
-        bot.send_message(f"🔍 종목 선정 시작 (예산: {budget:,.0f}원, 목표: {target_count}개)")
-        
-        # 0.5 Load Pre-Market Picks
+        from app.core.telegram_bot import bot
         import json
         import os
         from datetime import datetime
-        TOP_PICKS_FILE = "app/data/top_picks_KR.json"
-        pre_market_picks = []
-        
-        try:
-            if os.path.exists(TOP_PICKS_FILE):
-                with open(TOP_PICKS_FILE, "r", encoding='utf-8') as f:
-                    data = json.load(f)
-                    today_str = datetime.now().strftime("%Y-%m-%d")
-                    if data.get("date") == today_str and data.get("market") == "KR":
-                        pre_market_picks = data.get("picks", [])
-                        logger.info(f"Loaded {len(pre_market_picks)} Pre-Market Picks for KR.")
-                        bot.send_message(f"📂 장전 Top 10 종목 {len(pre_market_picks)}개를 후보에 추가합니다.")
-        except Exception as e:
-            logger.error(f"Failed to load top picks: {e}")
 
-        # 1. Get Candidates (Volume Rank)
-        candidates = kis.get_volume_rank()
-        if not candidates:
-            msg = "❌ 거래량 상위 종목 조회 실패 (후보 없음)"
-            logger.warning(msg)
-            if not pre_market_picks:
-                bot.send_message(msg)
-                return []
-            candidates = [] 
-
-        # Filter out ETFs, ETNs, Futures, SPACs
-        filtered_candidates = []
-        exclusion_keywords = ["KODEX", "TIGER", "KBSTAR", "SOL", "ACE", "HANARO", "KOSEF", "ARIRANG", "ETN", "스팩", "선물", "레버리지", "인버스"]
+        start_time = time.time()
         
-        # Add Pre-Market Picks First (Priority 1)
+        # 1. Market Context
+        market_ctx = market_analyst.get_market_context_for_ai("KR")
+        logger.info(f"[KR] Market Context: {market_ctx}")
+
+        # 2. Sourcing (Priorities)
+        candidates = []
         existing_symbols = set()
-        for pick in pre_market_picks:
-            filtered_candidates.append({
-                'mksc_shrn_iscd': pick['symbol'],
-                'hts_kor_isnm': pick['name'],
-                'is_pre_pick': True,
-                'source': 'Pre-Market'
-            })
-            existing_symbols.add(pick['symbol'])
+        
+        # Priority 1: Top 10 Picks (Pre-Market)
+        top_picks_path = "app/data/top_picks_KR.json"
+        try:
+            if os.path.exists(top_picks_path):
+                with open(top_picks_path, "r", encoding='utf-8') as f:
+                    data = json.load(f)
+                    if data.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                        for p in data.get("picks", []):
+                            if p['ticker'] not in existing_symbols:
+                                candidates.append({
+                                    'symbol': p['ticker'],
+                                    'name': p['stock_name'],
+                                    'priority': 1,
+                                    'source': 'Top 10',
+                                    'reason': p.get('selection_reason', '')
+                                })
+                                existing_symbols.add(p['ticker'])
+                        logger.info(f"[KR] Loaded {len(candidates)} Top 10 picks.")
+        except Exception as e:
+            logger.error(f"Failed to load KR Top 10: {e}")
 
-        # --- Trend-based Picks (Priority 2) ---
-        bot.send_message("🌊 실시간 뉴스 트렌드 종목 발굴 중...")
-        trend_candidates = await market_analyst.get_trend_candidates("KR")
-        
-        trend_added_count = 0
-        for t_stock in trend_candidates:
-            t_code = t_stock.get('code')
-            t_name = t_stock.get('name')
-            
-            if not t_code or t_code == "000000":
-                # AI didn't know code. Try simple search or skip?
-                # Resolving code by name is hard without master file list loaded.
-                # Ideally we ask KIS to search, but KIS search API might be slow/limited.
-                # For now, skip if no code.
-                continue
-                
-            # Normalize code (make sure 6 digits)
-            t_code = str(t_code).zfill(6)
-            
-            if t_code in existing_symbols: continue
+        # Priority 2: Real-time Trend (News)
+        trend_stocks = await market_analyst.get_trend_candidates("KR")
+        for t in trend_stocks:
+            code = str(t.get('code')).zfill(6)
+            if code not in existing_symbols and code != "000000":
+                candidates.append({
+                    'symbol': code,
+                    'name': t.get('name'),
+                    'priority': 2,
+                    'source': 'Trend',
+                    'reason': t.get('reason', '')
+                })
+                existing_symbols.add(code)
 
-            # Validate with KIS (Get Price check) to ensure it's a valid traded symbol
-            # Optimization: Just try to get price in the batch loop. 
-            # But we want to add to 'filtered_candidates'.
-            # Let's assume it's valid if code looks right.
-            
-            filtered_candidates.append({
-                'mksc_shrn_iscd': t_code,
-                'hts_kor_isnm': t_name,
-                'is_trend_pick': True, # Mark as trend
-                'source': 'Live-Trend'
-            })
-            existing_symbols.add(t_code)
-            trend_added_count += 1
-            
-        if trend_added_count > 0:
-            bot.send_message(f"🔥 AI 트렌드 종목 {trend_added_count}개 추가 (뉴스 기반 Priority)")
-            logger.info(f"Added {trend_added_count} trend candidates.")
-            
-        # -------------------------------------
-            
-        for stock in candidates:
-            symbol = stock['mksc_shrn_iscd']
-            if symbol in existing_symbols: continue
-            
-            name = stock['hts_kor_isnm']
-            if any(keyword in name for keyword in exclusion_keywords):
-                continue
-            filtered_candidates.append(stock)
-            existing_symbols.add(symbol)
-            
-        logger.info(f"Filtered {len(candidates) - (len(filtered_candidates) - len(pre_market_picks) - trend_added_count)} items. Total Candidates: {len(filtered_candidates)}")
+        # Priority 3: Volume Spike (KIS API)
+        vol_rank = kis.get_volume_rank()
+        if vol_rank:
+            exclusion = ["KODEX", "TIGER", "KBSTAR", "SOL", "ACE", "HANARO", "KOSEF", "ARIRANG", "ETN", "스팩", "선물", "레버리지", "인버스"]
+            for s in vol_rank:
+                sym = s['mksc_shrn_iscd']
+                nm = s['hts_kor_isnm']
+                if sym not in existing_symbols and not any(ex in nm for ex in exclusion):
+                    candidates.append({
+                        'symbol': sym,
+                        'name': nm,
+                        'priority': 3,
+                        'source': 'Volume'
+                    })
+                    existing_symbols.add(sym)
+                    if len(candidates) >= 30: break # Limit Total Candidates
         
-        # Report Top 20 Candidates
-        top_20 = filtered_candidates[:20]
-        top_20_names = ", ".join([s['hts_kor_isnm'] for s in top_20])
-        logger.info(f"Top 20 Candidates: {top_20_names}")
-        bot.send_message(f"📋 1차 후보(거래량 상위): {len(filtered_candidates)}개\n상위 20개: {top_20_names}")
+        logger.info(f"[KR] Sourcing Complete. Total Candidates: {len(candidates)}")
+        bot.send_message(f"🔍 [KR] 종목 발굴: {len(candidates)}개 (Top10/Trend/Volume)")
 
-        # Data collection list (Process in batches)
-        BATCH_SIZE = 5
-        total_candidates = len(filtered_candidates)
-        
-        bot.send_message(f"🔬 총 {total_candidates}개 후보를 {BATCH_SIZE}개씩 순차 분석합니다.")
-        
+        # 3. Filtering & Analysis (Batch)
         final_selected = []
+        BATCH_SIZE = 5
         
-        for i in range(0, total_candidates, BATCH_SIZE):
-            batch = filtered_candidates[i : i + BATCH_SIZE]
-            current_batch_num = (i // BATCH_SIZE) + 1
-            
-            logger.info(f"Processing Batch {current_batch_num} ({len(batch)} items)...")
-            bot.send_message(f"🔄 {current_batch_num}차 분석 중... ({i+1}~{i+len(batch)}위)")
-            
+        for i in range(0, len(candidates), BATCH_SIZE):
+            batch = candidates[i : i + BATCH_SIZE]
             analysis_jobs = []
             
             for stock in batch:
-                symbol = stock['mksc_shrn_iscd']
-                name = stock['hts_kor_isnm']
+                symbol = stock['symbol']
+                name = stock['name']
                 
-                await asyncio.sleep(0.1)
-                
-                # 2. Get Chart Data & Technical Analysis
+                # Data & Tech
                 daily_data = kis.get_daily_price(symbol)
-                if not daily_data:
-                    logger.info(f"Skipping {name}: No Data")
-                    continue
+                if not daily_data: continue
+                
+                tech = technical.analyze(daily_data)
+                
+                # --- Hard Filters (KR) ---
+                if tech['rsi'] >= 70: continue # Overbought
+                if tech['trend'] == 'DOWN': continue # Downtrend
+                
+                # Daily Change Calculation
+                daily_change = 0.0
+                if len(daily_data) >= 2:
+                    curr = float(daily_data[0]['stck_clpr'])
+                    prev = float(daily_data[1]['stck_clpr'])
+                    if prev > 0: daily_change = ((curr - prev) / prev) * 100
                     
-                tech_summary = technical.analyze(daily_data)
-                if tech_summary.get("status") in ["Error", "Not enough data"]:
-                    logger.info(f"Skipping {name}: Tech Error")
-                    continue
+                if daily_change >= 15.0: continue # Too high
                 
-                # Calculate Daily Change
-                try:
-                    if len(daily_data) >= 2:
-                        prev_close = float(daily_data[1]['stck_clpr'])
-                        curr_close = float(daily_data[0]['stck_clpr'])
-                        if prev_close > 0:
-                            change_rate = ((curr_close - prev_close) / prev_close) * 100
-                            tech_summary['daily_change'] = change_rate
-                        else:
-                            tech_summary['daily_change'] = 0.0
-                    else:
-                        tech_summary['daily_change'] = 0.0
-                except Exception:
-                    tech_summary['daily_change'] = 0.0
-                    
-                # Budget Filter
-                current_price = tech_summary['close']
-                if budget is not None and current_price > budget:
-                    continue
+                # Check Budget
+                if budget and tech['close'] > budget: continue
                 
-                # 2.5 Strict Technical Filters (Relaxed -> Tightened)
-                fail_reason = None
-                if tech_summary['rsi'] >= 70:
-                     fail_reason = f"RSI 과열 ({tech_summary['rsi']:.1f})"
-                elif tech_summary.get('daily_change', 0) >= 15.0:
-                     fail_reason = f"급등 부담 (+{tech_summary.get('daily_change'):.1f}%)"
-                elif tech_summary['trend'] == "DOWN":
-                     fail_reason = "하락 추세"
-                if fail_reason:
-                    continue 
-
-                # 3. Get News
-                await asyncio.sleep(0.1)
-                news_items = kis.get_news_titles(symbol)
-                news_titles = [n['hts_pbnt_titl_cntt'] for n in news_items[:3]] if news_items else []
-                
-                # Prepare job for AI Analysis
+                # Pass to AI
                 analysis_jobs.append({
                     "symbol": symbol,
                     "name": name,
-                    "tech_summary": tech_summary,
-                    "news_titles": news_titles
+                    "tech_summary": {**tech, "daily_change": daily_change},
+                    "news_titles": [], # Optimization: Fetch news only for high priority or just pass title from source?
+                    "market_status": market_ctx
                 })
-            
-            if not analysis_jobs:
-                bot.send_message(f"⚠️ {current_batch_num}차 분석 결과: 기술적 분석 통과 종목 없음.")
-                continue
 
-            logger.info(f"Batch {current_batch_num}: {len(analysis_jobs)} candidates passed technical check. Running AI...")
-            
-            # 4. Run AI Analysis (Batch) [ASYNC]
-            for job in analysis_jobs:
-                job['market_status'] = market_ctx 
-            
-            # Use await for async batch analysis
-            batch_results = await ai_analyzer.analyze_stocks_batch(analysis_jobs)
-            
-            # 5. Process Results
-            batch_selected = []
-            report_lines = []
+            if not analysis_jobs: continue
+
+            # AI Scoring
+            results = await ai_analyzer.analyze_stocks_batch(analysis_jobs)
             
             for job in analysis_jobs:
-                name = job['name']
-                symbol = job['symbol']
-                
-                ai_result = batch_results.get(symbol, {})
-                if not ai_result:
-                    report_lines.append(f"- {name}: 분석 실패")
-                    continue
-                    
-                # Safe Score Casting
-                score = 0
-                try:
-                    score = float(ai_result.get('score', 0))
-                except (ValueError, TypeError):
-                    score = 0
-                    
-                reason = ai_result.get('reason', 'N/A')
-                
-                if score >= 60: 
-                    strategy = ai_result.get('strategy', {})
-                    if not isinstance(strategy, dict): strategy = {}
-                    
-                    batch_selected.append({
-                        "symbol": symbol,
-                        "name": name,
+                res = results.get(job['symbol'])
+                if res and res.get('score', 0) >= 60:
+                    final_selected.append({
+                        "symbol": job['symbol'],
+                        "name": job['name'],
+                        "score": res['score'],
+                        "reason": res.get('reason', 'N/A'),
                         "price": job['tech_summary']['close'],
-                        "score": score,
-                        "reason": reason,
-                        "action": ai_result.get('action', 'Watch'),
-                        "target": strategy.get('target_price'),
-                        "stop_loss": strategy.get('stop_loss'),
-                        "rsi": job['tech_summary']['rsi'],
-                        "market": "KR" 
+                        "target": res.get('strategy', {}).get('target_price'),
+                        "stop_loss": res.get('strategy', {}).get('stop_loss'),
+                        "market": "KR"
                     })
-                    logger.info(f"Selected: {name} ({score})")
-                    report_lines.append(f"✅ {name}: {score}점 (선정됨)")
-                else:
-                     short_reason = reason[:30] + "..." if len(reason) > 30 else reason
-                     report_lines.append(f"🔻 {name}: {score}점 (탈락)\n   └ {short_reason}")
+
+            if len(final_selected) >= target_count: break
             
-            if report_lines:
-                bot.send_message(f"🤖 {current_batch_num}차 AI 분석 결과:\n" + "\n".join(report_lines))
-
-            if batch_selected:
-                final_selected.extend(batch_selected)
-                if len(final_selected) >= target_count:
-                    bot.send_message(f"✨ 매수 후보 {len(final_selected)}개 발굴 완료 (목표 {target_count}개 달성).")
-                    break
-        
         final_selected.sort(key=lambda x: x['score'], reverse=True)
-        elapsed = time.time() - start_time
-        logger.info(f"Selected {len(final_selected)} stocks in {elapsed:.2f} seconds.")
         
-        if not final_selected:
-             bot.send_message("❌ 모든 후보군을 검색했으나 적합한 종목이 없습니다.")
-
+        if final_selected:
+            msg = f"✨ [KR] 매수 후보 {len(final_selected)}개 선정 (예산: {budget:,.0f}원)\n"
+            for s in final_selected[:3]:
+                msg += f"- {s['name']} ({s['score']}점): {s['reason']}\n"
+            bot.send_message(msg)
+            
         return final_selected
+
+    async def select_stocks(self, budget=None, target_count=3):
+        """Wrapper for Backward Compatibility"""
+        # Checks time to decide KR or US? Or caller decides?
+        # Traditionally main_auto_trade calls select_stocks for KR.
+        # Let's route to select_stocks_kr.
+        return await self.select_stocks_kr(budget, target_count)
 
     async def select_us_stocks(self, budget=None):
         """
