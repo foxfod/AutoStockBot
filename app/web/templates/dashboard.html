@@ -240,6 +240,73 @@
 
     </main>
 
+    <!-- Top 10 Recommended Stocks Modal -->
+    <div id="top-picks-modal"
+        class="modal modal-hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+        <div
+            class="bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-700">
+            <!-- Header -->
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        🏆 Top 10 추천 종목
+                        <span id="top-picks-date" class="text-sm font-normal text-gray-400"></span>
+                    </h2>
+                    <span id="top-picks-status"
+                        class="bg-gray-700 px-2 py-0.5 rounded text-xs text-gray-400">Loading...</span>
+                </div>
+                <button onclick="closeTopPicksModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+
+            <!-- Tabs & Controls -->
+            <div class="p-4 bg-gray-800 border-b border-gray-700 flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex gap-4 border-b border-gray-700">
+                        <button id="tab-kr" onclick="switchTopPickTab('KR')"
+                            class="px-4 py-2 text-sm font-medium text-blue-400 border-b-2 border-blue-400 focus:outline-none">국내
+                            (KR)</button>
+                        <button id="tab-us" onclick="switchTopPickTab('US')"
+                            class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-200 focus:outline-none">미국
+                            (US)</button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="toggleAddPickForm()"
+                            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white flex items-center gap-1">
+                            <span>➕</span> 종목 추가
+                        </button>
+                        <button onclick="refreshTopPicks()"
+                            class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm text-white flex items-center gap-1">
+                            <span>🔄</span> AI 분석/갱신
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Add Pick Form (Hidden by default) -->
+                <div id="add-pick-form"
+                    class="hidden bg-gray-700/30 p-3 rounded border border-gray-600 flex flex-col gap-2">
+                    <h3 class="text-sm font-bold text-gray-300 mb-1">수동 종목 추가</h3>
+                    <div class="grid grid-cols-4 gap-2">
+                        <input type="text" id="add-ticker" placeholder="종목코드 (예: 005930)"
+                            class="bg-gray-700 border-gray-600 text-white text-sm rounded px-2 py-1 col-span-1">
+                        <input type="text" id="add-name" placeholder="종목명 (예: 삼성전자)"
+                            class="bg-gray-700 border-gray-600 text-white text-sm rounded px-2 py-1 col-span-1">
+                        <input type="number" id="add-target" placeholder="목표가 (선택)"
+                            class="bg-gray-700 border-gray-600 text-white text-sm rounded px-2 py-1 col-span-1">
+                        <button onclick="submitAddPick()"
+                            class="col-span-1 bg-green-600 hover:bg-green-500 text-white rounded text-sm">추가하기</button>
+                    </div>
+                    <input type="text" id="add-reason" placeholder="선정 이유 (선택)"
+                        class="bg-gray-700 border-gray-600 text-white text-sm rounded px-2 py-1 w-full">
+                </div>
+            </div>
+
+            <!-- List Content -->
+            <div id="top-picks-list" class="p-4 overflow-y-auto flex-1 flex flex-col gap-2 min-h-[300px]">
+                <!-- Dynamic Content Here -->
+            </div>
+        </div>
+    </div>
+
     <!-- Trade Detail Modal -->
     <div id="trade-modal"
         class="modal modal-hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -319,31 +386,8 @@
                 <button onclick="sellTrade()"
                     class="flex-1 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-bold text-white transition flex items-center justify-center gap-2">
                     🚨 전량 매도 (시장가)
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Top 10 Modal -->
-    <div id="top-picks-modal"
-        class="modal modal-hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-        <div
-            class="modal-body bg-gray-800 w-full max-w-2xl rounded-xl border border-gray-700 shadow-2xl flex flex-col max-h-[90vh]">
-            <div class="bg-gray-900 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
-                <div class="flex items-center gap-3">
-                    <h3 class="text-lg font-bold text-white">🏆 오늘의 Top 10</h3>
-                    <span id="top-picks-date"
-                        class="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded border border-gray-700">DATE</span>
-                </div>
-                <button onclick="closeTopPicksModal()" class="text-gray-400 hover:text-white text-xl">&times;</button>
-            </div>
-            <div id="top-picks-list" class="flex-1 overflow-y-auto p-4 space-y-2">
-                <!-- Content -->
-                <div class="text-center text-gray-500 py-10">데이터를 불러오는 중...</div>
-            </div>
-            <div class="bg-gray-900 px-4 py-3 border-t border-gray-700 flex justify-end gap-2">
-                <button onclick="refreshTopPicks('KR')"
-                    class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white transition flex items-center gap-1">
+                    class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white transition flex
+                    items-center gap-1">
                     🔄 KR 갱신
                 </button>
                 <button onclick="refreshTopPicks('US')"
@@ -921,26 +965,90 @@
             if (e.target === modal) closeModal();
         });
 
-        // --- Top 10 Modal ---
+        // --- Top 10 Modal & Add Pick Logic ---
         const topPicksModal = document.getElementById('top-picks-modal');
+        const addPickForm = document.getElementById('add-pick-form'); // New form container
 
         async function openTopPicksModal() {
             topPicksModal.classList.remove('modal-hidden');
-            await loadTopPicks();
+            document.body.style.overflow = 'hidden';
+            // Default to KR if not set
+            if (!currentTopPickMarket) switchTopPickTab('KR');
+            else loadTopPicks(currentTopPickMarket);
         }
 
         function closeTopPicksModal() {
             topPicksModal.classList.add('modal-hidden');
+            document.body.style.overflow = '';
         }
 
-        async function loadTopPicks() {
-            const listContainer = document.getElementById('top-picks-list');
+        let currentTopPickMarket = 'KR';
+
+        function switchTopPickTab(market) {
+            currentTopPickMarket = market;
+            document.getElementById('tab-kr').className = market === 'KR' ? 'px-4 py-2 text-sm font-medium text-blue-400 border-b-2 border-blue-400' : 'px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-200';
+            document.getElementById('tab-us').className = market === 'US' ? 'px-4 py-2 text-sm font-medium text-blue-400 border-b-2 border-blue-400' : 'px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-200';
+            loadTopPicks(market);
+        }
+
+        function toggleAddPickForm() {
+            addPickForm.classList.toggle('hidden');
+        }
+
+        async function submitAddPick() {
+            const ticker = document.getElementById('add-ticker').value.trim();
+            const name = document.getElementById('add-name').value.trim();
+            const reason = document.getElementById('add-reason').value.trim();
+            const target = parseFloat(document.getElementById('add-target').value);
+
+            if (!ticker || !name) {
+                alert('종목코드와 종목명은 필수입니다.');
+                return;
+            }
+
             try {
-                const res = await fetch('/api/top-picks');
+                const res = await fetch(`/api/top-picks/${currentTopPickMarket}/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticker: ticker,
+                        stock_name: name,
+                        selection_reason: reason || "사용자 수동 추가",
+                        target_price: target || 0
+                    })
+                });
+
+                if (res.ok) {
+                    alert('추가되었습니다.');
+                    // Reset form
+                    document.getElementById('add-ticker').value = '';
+                    document.getElementById('add-name').value = '';
+                    document.getElementById('add-reason').value = '';
+                    document.getElementById('add-target').value = '';
+                    toggleAddPickForm();
+                    loadTopPicks(currentTopPickMarket);
+                } else {
+                    const err = await res.json();
+                    alert(`오류: ${err.detail}`);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('통신 오류 발생');
+            }
+        }
+
+        async function loadTopPicks(market) {
+            if (!market) market = currentTopPickMarket;
+            const listContainer = document.getElementById('top-picks-list');
+
+            // Show skeleton or loading
+            listContainer.innerHTML = '<div class="text-center py-10 text-gray-500">데이터 로딩 중...</div>';
+
+            try {
+                const res = await fetch(`/api/top-picks?market=${market}`);
                 const data = await res.json();
 
                 if (!data.picks || data.picks.length === 0) {
-                    listContainer.innerHTML = '<div class="text-center text-gray-500 py-10">아직 선정된 Top 10 종목이 없습니다.<br>갱신 버튼을 눌러 분석을 시작하세요.</div>';
                     document.getElementById('top-picks-date').innerText = new Date().toLocaleDateString();
                     return;
                 }

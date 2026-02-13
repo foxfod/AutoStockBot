@@ -292,33 +292,123 @@ async def get_top_picks(market: str = "KR", user=Depends(login_required)):
         logging.error(f"Error reading top picks: {e}")
         return {}
 
+class TopPickAddRequest(BaseModel):
+    ticker: str
+    stock_name: str
+    selection_reason: str = "User Added"
+    target_price: Optional[float] = 0.0
+
+@app.post("/api/top-picks/{market}/add")
+async def add_top_pick(market: str, req: TopPickAddRequest, user=Depends(login_required)):
+    """
+    Manually add a stock to Top 10 list.
+    """
+    try:
+        file_path = f"app/data/top_picks_{market}.json"
+        data = {"picks": []}
+        
+        # Load existing
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding='utf-8') as f:
+                data = json.load(f)
+        
+        # Check duplicates
+        for p in data.get("picks", []):
+            if p['ticker'] == req.ticker:
+                raise HTTPException(status_code=400, detail="Stock already exists in list")
+                
+        new_pick = {
+            "stock_name": req.stock_name,
+            "ticker": req.ticker,
+            "selection_reason": req.selection_reason,
+            "target_price_today": req.target_price,
+            "source": "USER" # Mark as User Added
+        }
+        
+        # Add to beginning or end? User usually wants high priority.
+        # Let's add to beginning to show up top.
+        data["picks"].insert(0, new_pick)
+        
+        with open(file_path, "w", encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            
+        return {"status": "success", "message": f"Added {req.stock_name}", "picks": data["picks"]}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error adding top pick: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/top-picks/refresh")
 async def refresh_top_picks(req: TopPicksRequest, user=Depends(login_required)):
     """
     Trigger a fresh analysis for Top 10.
+    Preserves 'USER' source picks.
     """
     from app.core.market_analyst import market_analyst
     
     try:
-        # Prevent concurrent runs? selector.select_pre_market_picks might handle it or we assume user is careful.
-        # It takes time, so we should probably run it and return, or wait?
-        # User wants to see the result, so we await.
+        # 1. Load Existing User Picks
+        file_path = f"app/data/top_picks_{req.market}.json"
+        user_picks = []
+        if os.path.exists(file_path):
+             try:
+                with open(file_path, "r", encoding='utf-8') as f:
+                    existing = json.load(f)
+                    user_picks = [p for p in existing.get("picks", []) if p.get("source") == "USER"]
+             except Exception:
+                 pass # Ignore if file corrupt
         
-        picks = await market_analyst.generate_top_10_picks(req.market)
+        # 2. Generate New AI Picks
+        # generate_top_10_picks returns list of dicts. We need to inject 'source': 'AI'
+        ai_picks = await market_analyst.generate_top_10_picks(req.market)
         
-        # Read the file again to return full structure or just return picks
-        # select_pre_market_picks returns the list of dicts.
+        # Add Source tag to AI picks
+        for p in ai_picks:
+            p['source'] = 'AI'
+            
+        # 3. Merge (User Picks First)
+        final_picks = user_picks + ai_picks
         
-        # We construct the response to match file format
-        return {
+        # 4. Save Logic is inside generate_top_10_picks... wait.
+        # market_analyst.generate_top_10_picks SAVES the file inside itself.
+        # This will overwrite our user picks if we don't handle it inside market_analyst OR here.
+        # Impl Plan said: "Update refresh logic". 
+        # Better: We save here manually to ensure preservation, OR we update market_analyst.
+        # Updating market_analyst is cleaner but 'main.py' logic is easier to control here now.
+        # Let's OVERWRITE what market_analyst saved.
+        # It's a bit redundant (write once by AI, then write again here), but safe.
+        
+        # Construct Full Data
+        full_data = {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "market": req.market,
-            "picks": picks,
+            "picks": final_picks,
+            "timestamp": datetime.now().isoformat()
+            # market_summary is missing here because generate_top_10_picks return value is just list?
+            # actually internal save has summary.
+            # We should probably read the file 'generate_top_10_picks' just wrote to get summary, 
+            # then merge and re-save.
+        }
+        
+        # Re-read what AI saved to get summary
+        if os.path.exists(file_path):
+             with open(file_path, "r", encoding='utf-8') as f:
+                 ai_data = json.load(f)
+                 full_data["market_summary"] = ai_data.get("market_summary", {})
+        
+        with open(file_path, "w", encoding='utf-8') as f:
+            json.dump(full_data, f, ensure_ascii=False, indent=2)
+
+        return {
+            "date": full_data["date"],
+            "market": req.market,
+            "picks": final_picks,
             "status": "success"
         }
     except Exception as e:
         logging.error(f"Error refreshing top picks: {e}")
-        # raise HTTPException(status_code=500, detail=str(e))
         return {"status": "error", "message": str(e)}
 
 @app.delete("/api/top-picks/{market}/{symbol}")
