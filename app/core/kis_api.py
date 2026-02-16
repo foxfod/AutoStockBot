@@ -955,4 +955,41 @@ class KisApi:
         # Use price endpoint but usually specific ticker for index
         return self.get_overseas_price(symbol, excg)
 
+    def is_us_market_open(self):
+        """
+        Check if US Market is really open by checking Volume of QQQ (Nasdaq ETF).
+        Run this 10 mins after Market Open (e.g. 23:40 or 22:40).
+        If Volume is 0, it likely means Holiday.
+        """
+        # QQQ is highly liquid.
+        price_data = self.get_overseas_price("QQQ", "NAS")
+        
+        if not price_data:
+            return None # Cannot determine (API Error)
+            
+        try:
+             # 'tvol': Total Volume
+             vol = float(price_data.get('tvol', 0))
+             logger.info(f"🔎 US Market Check (QQQ Volume): {vol:,.0f}")
+             
+             if vol > 0:
+                 return True
+             else:
+                 # Double check with SPY just in case QQQ data is weird
+                 spy_data = self.get_overseas_price("SPY", "AMS") # SPY is usually on Amex/Arca/NYSE depending on data feed
+                 if not spy_data:
+                      spy_data = self.get_overseas_price("SPY", "NYS")
+
+                 if spy_data:
+                      spy_vol = float(spy_data.get('tvol', 0))
+                      logger.info(f"🔎 US Market Check (SPY Volume): {spy_vol:,.0f}")
+                      if spy_vol > 0:
+                           return True
+
+                 return False # Both 0 -> Market likely Closed
+                 
+        except Exception as e:
+            logger.error(f"Failed to parse volume for Market Check: {e}")
+            return None
+
 kis = KisApi()

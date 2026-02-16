@@ -60,6 +60,20 @@ US_TRADE_START = dtime(22, 30) # Pre-market / Early
 US_LIQUIDATION = dtime(5, 40)  # 05:40 AM KST (Before US Close 06:00)
 US_CLOSE = dtime(6, 0)
 
+# 2026 US Market Holidays (NYSE/Nasdaq)
+US_HOLIDAYS_2026 = [
+    "2026-01-01", # New Year's Day
+    "2026-01-19", # Martin Luther King, Jr. Day
+    "2026-02-16", # Washington's Birthday
+    "2026-04-03", # Good Friday
+    "2026-05-25", # Memorial Day
+    "2026-06-19", # Juneteenth National Independence Day
+    "2026-07-03", # Independence Day (Observed)
+    "2026-09-07", # Labor Day
+    "2026-11-26", # Thanksgiving Day
+    "2026-12-25", # Christmas Day
+]
+
 SCAN_INTERVAL = 10 # 10 Minutes
 MAX_TRADES = 3
 from app.core.version import VERSION
@@ -96,12 +110,22 @@ def check_market_open(market_type="KR"):
     1. Weekend (Sat/Sun) -> Closed
        - Exception: US Market is OPEN on Saturday Morning (Fri Session)
        - Exception: US Market is CLOSED on Monday Morning (Sun Session)
-    2. Circuit Breaker Flag -> Closed (If API noted holiday previously)
+    2. Holidays (Hardcoded 2026)
+    3. Circuit Breaker Flag -> Closed (If API noted holiday previously)
     """
     now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
     
     # 1. Check Weekend (0=Mon, 5=Sat, 6=Sun)
     if market_type == "US":
+        # Check Hardcoded Holidays (2026)
+        # Note: US Market Holiday Check should consider the "Trading Day".
+        # If it's Saturday Morning (Fri Session), strict date check might be tricky.
+        # But Holidays are usually Full Day Closures.
+        # If today is a Holiday, market is closed.
+        if today_str in US_HOLIDAYS_2026:
+             return False, f"미국 휴장일 ({today_str})"
+
         # Saturday Morning (until 08:00 KST) is part of Friday Session -> OPEN
         if now.weekday() == 5 and now.time() < dtime(8, 0):
              pass # Treat as Open (Friday Night extension)
@@ -117,6 +141,8 @@ def check_market_open(market_type="KR"):
         # KR Market
         if now.weekday() >= 5:
             return False, "주말 (토/일)" # Weekend (Sat/Sun)
+            
+        # Simplified KR Holidays (Add if needed, for now mainly US requested)
         
     # 2. Check Circuit Breaker
     if market_type == "KR" and state.get("kr_market_closed"):
