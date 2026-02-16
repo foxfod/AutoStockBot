@@ -213,6 +213,9 @@ async def trading_loop():
                             state['last_scan_time'] = now
                             if candidates:
                                 trade_manager.process_signals(candidates) # Filters internally
+                    
+                    # [FIX] Update last_scan_time even if skipped (Full Slots or Low Budget)
+                    state['last_scan_time'] = now
 
                 # 2. Monitoring
                 if is_time_in_range(KR_TRADE_START, KR_LIQUIDATION, t):
@@ -325,6 +328,8 @@ async def trading_loop():
                             state['last_scan_time'] = now
                             if candidates:
                                 trade_manager.process_signals(candidates)
+                        # [FIX] Update last_scan_time even if skipped, to prevent infinite loop
+                        state['last_scan_time'] = now
 
                 # 2. Monitoring
                 if is_time_in_range(US_TRADE_START, US_LIQUIDATION, t):

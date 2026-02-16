@@ -107,8 +107,8 @@ class TradeManager:
             self.capital_usd = float(val_u)
             
             if self.capital_usd < 1 and self.capital_krw > 50000:
-                logger.warning("WARNING: USD Balance is 0! (But KRW is available)")
-                logger.warning("Tip: Enable 'Integrated Margin' (통합증거금) in KIS App or Exchange Currency.")
+                logger.info("ℹ️ USD Balance is 0, but KRW is available. (Integrated Margin Mode assumed)")
+                # logger.warning("Tip: Enable 'Integrated Margin' (통합증거금) in KIS App or Exchange Currency.")
             
             # Total Asset USD (Estimate if key missing)
             # ovrs_tot_asst_amt might be the key? Using Sum for safety
