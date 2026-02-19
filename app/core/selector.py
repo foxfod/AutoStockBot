@@ -520,6 +520,10 @@ class Selector:
                      logger.warning(f"AI returned invalid format for {job['symbol']}: {res}")
                      continue
 
+                strategy = res.get('strategy', {})
+                if not isinstance(strategy, dict):
+                    strategy = {}
+
                 if res and res.get('score', 0) >= 60:
                     final_selected.append({
                         "symbol": job['symbol'],
@@ -527,8 +531,8 @@ class Selector:
                         "score": res['score'],
                         "reason": res.get('reason', 'N/A'),
                         "price": job['tech_summary']['close'],
-                        "target": res.get('strategy', {}).get('target_price'),
-                        "stop_loss": res.get('strategy', {}).get('stop_loss'),
+                        "target": strategy.get('target_price'),
+                        "stop_loss": strategy.get('stop_loss'),
                         "market": "KR"
                     })
 
