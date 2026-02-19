@@ -259,7 +259,25 @@ class AIAnalyzer:
                     # Assume formatted as requested { 'SYMBOL': ... }
                     results = parsed
             
-            return results
+            # Final Validation: Ensure all values are dicts
+            cleaned_results = {}
+            for k, v in results.items():
+                if isinstance(v, dict):
+                    cleaned_results[k] = v
+                elif isinstance(v, str):
+                    try:
+                        # Try to fix "double encoded" json or just string garbage
+                        v_parsed = json.loads(self._clean_json_text(v))
+                        if isinstance(v_parsed, dict):
+                            cleaned_results[k] = v_parsed
+                        else:
+                            logger.warning(f"Batch Item {k} parsed but not dict: {v_parsed}")
+                    except:
+                         logger.warning(f"Batch Item {k} is string and parse failed: {v}")
+                else:
+                    logger.warning(f"Batch Item {k} invalid type: {type(v)}")
+            
+            return cleaned_results
             
         except Exception as e:
             logger.error(f"Batch Analysis Parsing Failed ({used_model}): {e}")

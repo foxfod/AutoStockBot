@@ -227,6 +227,10 @@ class Selector:
                 # Safe casting for score
                 raw_score = 0
                 if res:
+                    if not isinstance(res, dict):
+                         logger.warning(f"AI returned invalid format for {symbol}: {type(res)} - {res}")
+                         continue
+                         
                     try:
                         raw_score = float(res.get('score', 0))
                     except (ValueError, TypeError):
@@ -510,6 +514,12 @@ class Selector:
             
             for job in analysis_jobs:
                 res = results.get(job['symbol'])
+                
+                # Validation
+                if res and not isinstance(res, dict):
+                     logger.warning(f"AI returned invalid format for {job['symbol']}: {res}")
+                     continue
+
                 if res and res.get('score', 0) >= 60:
                     final_selected.append({
                         "symbol": job['symbol'],
@@ -754,6 +764,12 @@ class Selector:
             for job in batch:
                 symbol = job['symbol']
                 res = batch_results.get(symbol)
+                
+                # Validation
+                if res and not isinstance(res, dict):
+                     logger.warning(f"AI returned invalid format for {symbol}: {res}")
+                     continue
+
                 if res and res.get('score', 0) >= 0: # Accept logic
                     scored_candidates.append({
                         "symbol": symbol,
